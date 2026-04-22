@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		7569FDAC2F992E5100296E73 /* Lua in Frameworks */ = {isa = PBXBuildFile; productRef = 7569FDAB2F992E5100296E73 /* Lua */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		7569FCE62F9781AB00296E73 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -52,6 +56,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				7569FDAC2F992E5100296E73 /* Lua in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -112,6 +117,7 @@
 			);
 			name = PandaPing;
 			packageProductDependencies = (
+				7569FDAB2F992E5100296E73 /* Lua */,
 			);
 			productName = PandaPing;
 			productReference = 7569FCD62F9781AA00296E73 /* PandaPing.app */;
@@ -195,6 +201,9 @@
 			);
 			mainGroup = 7569FCCD2F9781AA00296E73;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				7569FDAA2F992E5100296E73 /* XCRemoteSwiftPackageReference "LuaSwift" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 7569FCD72F9781AA00296E73 /* Products */;
 			projectDirPath = "";
@@ -635,6 +644,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		7569FDAA2F992E5100296E73 /* XCRemoteSwiftPackageReference "LuaSwift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/tomsci/LuaSwift.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.0.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		7569FDAB2F992E5100296E73 /* Lua */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7569FDAA2F992E5100296E73 /* XCRemoteSwiftPackageReference "LuaSwift" */;
+			productName = Lua;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 7569FCCE2F9781AA00296E73 /* Project object */;
 }
