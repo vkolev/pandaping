@@ -167,27 +167,37 @@ struct ChannelListView: View {
     }
 
     private func privateChatRow(_ chat: IRCChannel, serverIndex: Int, serverHostname: String) -> some View {
+        @State var isHovering = false
+        
         let selected = manager.selection == .privateMessage(serverIndex: serverIndex, nickname: chat.name)
-        return Button {
+        
+        return HStack {
+            VStack(alignment: .leading) {
+                Text(chat.name)
+                    .foregroundStyle(selected ? .primary : .secondary)
+                if manager.connections.count > 1 {
+                    Text(serverHostname)
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+            Spacer()
+            unreadBadge(chat.unreadCount)
+        }
+        .padding(2)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .onTapGesture {
             manager.selection = .privateMessage(serverIndex: serverIndex, nickname: chat.name)
             manager.connections[serverIndex].markPrivateChatAsRead(chat.name)
-        } label: {
-            HStack {
-                VStack(alignment: .leading) {
-                    Text(chat.name)
-                        .foregroundStyle(selected ? .primary : .secondary)
-                    if manager.connections.count > 1 {
-                        Text(serverHostname)
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                    }
-                }
-                Spacer()
-                unreadBadge(chat.unreadCount)
-            }
         }
-        .contentShape(Rectangle())
-        .buttonStyle(.borderless)
+        .background(
+            RoundedRectangle(cornerRadius: 4)
+                .fill(isHovering || selected ? Color.blue.opacity(0.2) : Color.clear)
+        )
+        .onHover { hovering in
+            isHovering = hovering
+        }
     }
 
     @ViewBuilder
