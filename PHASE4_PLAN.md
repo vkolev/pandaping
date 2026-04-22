@@ -20,7 +20,13 @@
 - [ ] Test with real IRC servers (e.g. Libera Chat, OFTC)
 - [ ] Gather feedback on UI/UX and plugin usability
 
-### 3. Performance Optimization
+### 3. Bubble Message View (deferred from Phase 1)
+- [ ] Implement bubble view:
+  - [ ] Rounded message bubbles, avatars, rich text
+  - [ ] Group consecutive messages from the same user
+- [ ] Add a toggle in settings to switch between classic and bubble views
+
+### 4. Performance Optimization
 - [ ] Profile memory usage with many channels/messages
 - [ ] Optimize message rendering (e.g. `LazyVStack`)
 
