@@ -9,9 +9,11 @@ import SwiftUI
 
 @main
 struct PandaPingApp: App {
+    @State private var serverManager = ServerManager()
+
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            ContentView(serverManager: serverManager)
         }
     }
 }
