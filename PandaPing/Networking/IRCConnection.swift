@@ -165,8 +165,8 @@ class IRCConnection: Identifiable {
             await send(.quit(message: message))
             disconnect()
 
-        case .pluginCommand(let command, let args):
-            try? luaEngine?.executeCommand(command, args: args)
+        case .pluginCommand(let command, let args, let target):
+            try? luaEngine?.executeCommand(command, args: args, target: target)
 
         case .unknown:
             break
