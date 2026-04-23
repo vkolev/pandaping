@@ -25,27 +25,26 @@ enum IRCTransportError: Error, LocalizedError {
 
 /// IRC transport backed by Network.framework (NWConnection).
 /// Handles raw TCP (or TLS) communication, line buffering, and \r\n splitting.
+/// Supports reconnection — each `connect()` call creates a fresh NWConnection and stream.
 final class NWIRCTransport: IRCTransport, @unchecked Sendable {
-    private let connection: NWConnection
+    private let host: NWEndpoint.Host
+    private let port: NWEndpoint.Port
+    private let useSSL: Bool
     private let queue = DispatchQueue(label: "com.pandaping.irc-transport")
+
+    private var connection: NWConnection?
     private var continuation: AsyncStream<String>.Continuation?
     private var connectContinuation: CheckedContinuation<Void, Error>?
     private var buffer = Data()
 
-    let lines: AsyncStream<String>
+    private(set) var lines: AsyncStream<String>
 
     init(server: IRCServer) {
-        let host = NWEndpoint.Host(server.hostname)
-        let port = NWEndpoint.Port(integerLiteral: UInt16(server.port))
+        self.host = NWEndpoint.Host(server.hostname)
+        self.port = NWEndpoint.Port(integerLiteral: UInt16(server.port))
+        self.useSSL = server.useSSL
 
-        if server.useSSL {
-            let tlsOptions = NWProtocolTLS.Options()
-            let params = NWParameters(tls: tlsOptions)
-            self.connection = NWConnection(host: host, port: port, using: params)
-        } else {
-            self.connection = NWConnection(host: host, port: port, using: .tcp)
-        }
-
+        // Placeholder stream — replaced by a fresh one on each connect()
         var cont: AsyncStream<String>.Continuation?
         lines = AsyncStream { continuation in
             cont = continuation
@@ -54,9 +53,32 @@ final class NWIRCTransport: IRCTransport, @unchecked Sendable {
     }
 
     func connect() async throws {
-        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
-            self.connectContinuation = cont
-            connection.stateUpdateHandler = { [weak self] state in
+        // Tear down any previous connection
+        connection?.cancel()
+        continuation?.finish()
+        buffer = Data()
+
+        // Create a fresh NWConnection
+        let conn: NWConnection
+        if useSSL {
+            let tlsOptions = NWProtocolTLS.Options()
+            let params = NWParameters(tls: tlsOptions)
+            conn = NWConnection(host: host, port: port, using: params)
+        } else {
+            conn = NWConnection(host: host, port: port, using: .tcp)
+        }
+        self.connection = conn
+
+        // Create a fresh AsyncStream for incoming lines
+        var cont: AsyncStream<String>.Continuation?
+        lines = AsyncStream { continuation in
+            cont = continuation
+        }
+        continuation = cont
+
+        try await withCheckedThrowingContinuation { (cc: CheckedContinuation<Void, Error>) in
+            self.connectContinuation = cc
+            conn.stateUpdateHandler = { [weak self] state in
                 guard let self else { return }
                 switch state {
                 case .ready:
@@ -73,16 +95,17 @@ final class NWIRCTransport: IRCTransport, @unchecked Sendable {
                     break
                 }
             }
-            connection.start(queue: queue)
+            conn.start(queue: self.queue)
         }
     }
 
     func disconnect() {
-        connection.cancel()
+        connection?.cancel()
         continuation?.finish()
     }
 
     func sendLine(_ line: String) async throws {
+        guard let connection else { throw IRCTransportError.disconnected }
         let data = Data((line + "\r\n").utf8)
         try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
             connection.send(content: data, completion: .contentProcessed { error in
@@ -98,6 +121,7 @@ final class NWIRCTransport: IRCTransport, @unchecked Sendable {
     // MARK: - Private
 
     private func startReceiving() {
+        guard let connection else { return }
         connection.receive(minimumIncompleteLength: 1, maximumLength: 4096) { [weak self] data, _, isComplete, error in
             guard let self else { return }
 

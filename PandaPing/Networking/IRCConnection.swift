@@ -33,10 +33,8 @@ class IRCConnection: Identifiable {
     private(set) var serverMessages: [IRCMessage] = []
     private(set) var nickname: String
 
-    /// The Lua plugin engine for this connection, if active.
-    var luaEngine: LuaEngine? {
-        didSet { luaEngine?.delegate = self }
-    }
+    /// The plugin manager shared across all connections.
+    var pluginManager: PluginManager?
 
     private let transport: any IRCTransport
     private var processingTask: Task<Void, Never>?
@@ -166,7 +164,7 @@ class IRCConnection: Identifiable {
             disconnect()
 
         case .pluginCommand(let command, let args, let target):
-            try? luaEngine?.executeCommand(command, args: args, target: target)
+            try? pluginManager?.executeCommand(command, args: args, target: target, delegate: self)
 
         case .unknown:
             break
@@ -317,6 +315,10 @@ class IRCConnection: Identifiable {
 extension IRCConnection: LuaEngineDelegate {
     func luaEngine(_ engine: LuaEngine, sendMessage text: String, to target: String) {
         Task { await sendUserMessage(text, to: target) }
+    }
+
+    func luaEngine(_ engine: LuaEngine, sendAction text: String, to target: String) {
+        Task { await sendAction(text, to: target) }
     }
 
     func luaEngineCurrentNickname(_ engine: LuaEngine) -> String {

@@ -64,6 +64,20 @@ send_message("#general", "Hello everyone!")
 send_message("alice", "Hey Alice!")
 ```
 
+### send_action(target, text)
+
+Sends a CTCP ACTION (`/me`) to a channel or user.
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `target` | string | Channel name (e.g. `"#swift"`) or nickname |
+| `text` | string | The action text (without `/me` prefix) |
+
+```lua
+send_action("#general", "waves hello")
+-- Appears as: * YourNick waves hello
+```
+
 ### get_current_nick()
 
 Returns the current nickname on the active IRC connection.
