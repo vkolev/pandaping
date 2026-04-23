@@ -71,6 +71,7 @@ struct ChannelListView: View {
                         .font(.headline)
                 }
             }
+
         }
         .listStyle(.sidebar)
         .navigationTitle("Channels")
@@ -115,11 +116,7 @@ struct ChannelListView: View {
                 if connection.state == .connected {
                     connection.disconnect()
                 } else {
-                    // TODO
-//                    Task {
-//                        await manager.selectedConnection?.connect()
-////                        await connection.connect()
-//                    }
+                    Task { await connection.connect() }
                 }
             } label: {
                 Image(

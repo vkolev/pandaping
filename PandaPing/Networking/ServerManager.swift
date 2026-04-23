@@ -35,6 +35,9 @@ class ServerManager {
     /// The user's current sidebar selection.
     var selection: ChatSelection?
 
+    /// Shared plugin manager. Set externally after creation.
+    var pluginManager: PluginManager?
+
     private let transportFactory: @Sendable (IRCServer) -> any IRCTransport
 
     init(transportFactory: @escaping @Sendable (IRCServer) -> any IRCTransport) {
@@ -50,6 +53,7 @@ class ServerManager {
     func addServer(_ config: IRCServer) {
         let transport = transportFactory(config)
         let connection = IRCConnection(server: config, transport: transport)
+        connection.pluginManager = pluginManager
         connections.append(connection)
     }
 
