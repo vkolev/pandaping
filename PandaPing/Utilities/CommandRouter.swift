@@ -16,6 +16,7 @@ enum UserAction: Equatable {
     case privateMessage(target: String, text: String)
     case changeNick(String)
     case quit(message: String?)
+    case pluginCommand(command: String, args: String, target: String?)
     case unknown(command: String)
 }
 
@@ -24,6 +25,10 @@ enum UserAction: Equatable {
 /// Slash commands (e.g. `/join #swift`) are parsed into their respective actions.
 /// Plain text is routed as a `sendMessage` to the current target (channel or DM).
 enum CommandRouter {
+
+    /// Plugin command names that should be routed to the Lua engine.
+    /// Updated by the plugin system when plugins are loaded/unloaded.
+    static var pluginCommands: Set<String> = []
 
     /// Parse a raw input string into a `UserAction`, if possible.
     ///
@@ -94,6 +99,9 @@ enum CommandRouter {
             return .quit(message: args)
 
         default:
+            if pluginCommands.contains(command) {
+                return .pluginCommand(command: command, args: args ?? "", target: currentTarget)
+            }
             return .unknown(command: command)
         }
     }
