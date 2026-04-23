@@ -32,7 +32,8 @@ struct ClassicMessageView: View {
                     if let topic, !topic.isEmpty {
                         Text("—")
                             .foregroundStyle(.tertiary)
-                        Text(topic)
+                        ClickableTextView(text: topic)
+//                            .textSelection(.enabled)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
