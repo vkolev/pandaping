@@ -80,14 +80,20 @@ final class LuaEngine {
     /// - Parameters:
     ///   - name: The command name (without leading slash), e.g. "dice"
     ///   - args: The arguments string (everything after the command name)
-    func executeCommand(_ name: String, args: String) throws {
+    ///   - target: The current channel or DM target, if any
+    func executeCommand(_ name: String, args: String, target: String? = nil) throws {
         guard let L else { throw LuaEngineError.engineClosed }
         guard let handler = registeredCommands[name] else {
             throw LuaEngineError.unknownCommand(name)
         }
         handler.push(onto: L)
         L.push(args)
-        try L.pcall(nargs: 1, nret: 0)
+        if let target {
+            L.push(target)
+        } else {
+            L.pushnil()
+        }
+        try L.pcall(nargs: 2, nret: 0)
     }
 
     // MARK: - Bridge Functions
@@ -158,6 +164,16 @@ final class LuaEngine {
             return 0
         })
         L.setglobal(name: "log")
+
+        // get_time(format?) -> string
+        L.push({ state in
+            let format = state.tostring(1) ?? "HH:mm:ss"
+            let formatter = DateFormatter()
+            formatter.dateFormat = format
+            state.push(formatter.string(from: Date()))
+            return 1
+        })
+        L.setglobal(name: "get_time")
 
         // Disable require() for sandboxing
         L.push({ state in

@@ -16,7 +16,7 @@ enum UserAction: Equatable {
     case privateMessage(target: String, text: String)
     case changeNick(String)
     case quit(message: String?)
-    case pluginCommand(command: String, args: String)
+    case pluginCommand(command: String, args: String, target: String?)
     case unknown(command: String)
 }
 
@@ -100,7 +100,7 @@ enum CommandRouter {
 
         default:
             if pluginCommands.contains(command) {
-                return .pluginCommand(command: command, args: args ?? "")
+                return .pluginCommand(command: command, args: args ?? "", target: currentTarget)
             }
             return .unknown(command: command)
         }

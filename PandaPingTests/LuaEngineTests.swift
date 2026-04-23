@@ -343,9 +343,93 @@ struct LuaEngineTests {
         CommandRouter.pluginCommands = ["dice", "time"]
 
         let action = CommandRouter.parse("/dice 6", currentTarget: "#test")
-        #expect(action == .pluginCommand(command: "dice", args: "6"))
+        #expect(action == .pluginCommand(command: "dice", args: "6", target: "#test"))
+
+        let noTarget = CommandRouter.parse("/dice 6", currentTarget: nil)
+        #expect(noTarget == .pluginCommand(command: "dice", args: "6", target: nil))
 
         let unknown = CommandRouter.parse("/foobar", currentTarget: nil)
         #expect(unknown == .unknown(command: "foobar"))
+    }
+
+    // MARK: - Target Passing
+
+    @Test("Command handler receives current target as second argument")
+    @MainActor
+    func handlerReceivesTarget() throws {
+        let engine = LuaEngine()
+        let delegate = MockLuaEngineDelegate()
+        engine.delegate = delegate
+        defer { engine.close() }
+
+        try engine.loadScript("""
+            register_command("reply", function(args, target)
+                if target then
+                    send_message(target, "Reply: " .. args)
+                else
+                    log("no target")
+                end
+            end)
+        """)
+
+        try engine.executeCommand("reply", args: "hello", target: "#swift")
+
+        #expect(delegate.sentMessages.count == 1)
+        #expect(delegate.sentMessages[0].target == "#swift")
+        #expect(delegate.sentMessages[0].text == "Reply: hello")
+    }
+
+    @Test("Command handler receives nil target when none is set")
+    @MainActor
+    func handlerReceivesNilTarget() throws {
+        let engine = LuaEngine()
+        defer { engine.close() }
+
+        try engine.loadScript("""
+            register_command("check", function(args, target)
+                if target == nil then
+                    log("target is nil")
+                else
+                    log("target is " .. target)
+                end
+            end)
+        """)
+
+        try engine.executeCommand("check", args: "", target: nil)
+        #expect(engine.logMessages == ["target is nil"])
+    }
+
+    // MARK: - get_time
+
+    @Test("get_time returns a non-empty time string")
+    @MainActor
+    func getTimeDefault() throws {
+        let engine = LuaEngine()
+        defer { engine.close() }
+
+        try engine.loadScript("""
+            local t = get_time()
+            log(t)
+        """)
+
+        #expect(engine.logMessages.count == 1)
+        // Default format HH:mm:ss produces something like "14:30:05"
+        #expect(engine.logMessages[0].contains(":"))
+    }
+
+    @Test("get_time with custom format")
+    @MainActor
+    func getTimeCustomFormat() throws {
+        let engine = LuaEngine()
+        defer { engine.close() }
+
+        try engine.loadScript("""
+            local t = get_time("yyyy")
+            log(t)
+        """)
+
+        #expect(engine.logMessages.count == 1)
+        // Should return a 4-digit year string
+        #expect(engine.logMessages[0].count == 4)
     }
 }
