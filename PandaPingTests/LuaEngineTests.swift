@@ -13,12 +13,17 @@ import Testing
 @MainActor
 final class MockLuaEngineDelegate: LuaEngineDelegate {
     var sentMessages: [(text: String, target: String)] = []
+    var sentActions: [(text: String, target: String)] = []
     var nickname: String = "testbot"
     var channelUsers: [String: [ChannelUser]] = [:]
     var loggedMessages: [String] = []
 
     func luaEngine(_ engine: LuaEngine, sendMessage text: String, to target: String) {
         sentMessages.append((text: text, target: target))
+    }
+
+    func luaEngine(_ engine: LuaEngine, sendAction text: String, to target: String) {
+        sentActions.append((text: text, target: target))
     }
 
     func luaEngineCurrentNickname(_ engine: LuaEngine) -> String {
@@ -431,5 +436,24 @@ struct LuaEngineTests {
         #expect(engine.logMessages.count == 1)
         // Should return a 4-digit year string
         #expect(engine.logMessages[0].count == 4)
+    }
+
+    // MARK: - send_action
+
+    @Test("send_action calls delegate with correct target and text")
+    @MainActor
+    func sendAction() throws {
+        let engine = LuaEngine()
+        let delegate = MockLuaEngineDelegate()
+        engine.delegate = delegate
+        defer { engine.close() }
+
+        try engine.loadScript("""
+            send_action("#swift", "waves hello")
+        """)
+
+        #expect(delegate.sentActions.count == 1)
+        #expect(delegate.sentActions[0].target == "#swift")
+        #expect(delegate.sentActions[0].text == "waves hello")
     }
 }

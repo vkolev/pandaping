@@ -16,6 +16,8 @@ import Lua
 protocol LuaEngineDelegate: AnyObject {
     /// Send a message to a channel or user.
     func luaEngine(_ engine: LuaEngine, sendMessage text: String, to target: String)
+    /// Send a CTCP ACTION (/me) to a channel or user.
+    func luaEngine(_ engine: LuaEngine, sendAction text: String, to target: String)
     /// Return the current nickname on this connection.
     func luaEngineCurrentNickname(_ engine: LuaEngine) -> String
     /// Return the users in a channel, or nil if not joined.
@@ -122,6 +124,17 @@ final class LuaEngine {
             return 0
         })
         L.setglobal(name: "send_message")
+
+        // send_action(target, text) — CTCP ACTION (/me)
+        L.push({ [weak self] state in
+            guard let self else { return 0 }
+            let target = state.tostring(1) ?? ""
+            let text = state.tostring(2) ?? ""
+            guard !target.isEmpty, !text.isEmpty else { return 0 }
+            self.delegate?.luaEngine(self, sendAction: text, to: target)
+            return 0
+        })
+        L.setglobal(name: "send_action")
 
         // get_current_nick() -> string
         L.push({ [weak self] state in
