@@ -11,6 +11,7 @@ import SwiftUI
 /// "Private Messages" section at the bottom for active DMs.
 struct ChannelListView: View {
     @Bindable var manager: ServerManager
+    @Environment(AppSettings.self) private var appSettings
     @State private var showingAddServer = false
     @State private var showingJoinChannel = false
     @State private var currentActionIndex = 0
@@ -27,9 +28,9 @@ struct ChannelListView: View {
                 } header: {
                     serverHeader(connection, serverIndex: index)
                         .contextMenu {
-                            if connection.state == .connected {
+                            if connection.state == .connected || isReconnecting(connection.state) {
                                 Button {
-                                    connection.disconnect()
+                                    Task { await connection.gracefulDisconnect(message: appSettings.quitMessage) }
                                 } label: {
                                     Label("Disconnect", systemImage: "bolt.slash")
                                 }
@@ -78,14 +79,29 @@ struct ChannelListView: View {
         .navigationTitle("Channels")
         .toolbar {
             ToolbarItem {
-                Button {
-                    showingAddServer = true
+                Menu {
+                    Button {
+                        showingAddServer = true
+                    } label: {
+                        Label("New Server…", systemImage: "plus")
+                    }
+
+                    if !appSettings.savedServers.isEmpty {
+                        Divider()
+                        ForEach(appSettings.savedServers) { saved in
+                            Button {
+                                manager.addAndConnect(saved.config)
+                            } label: {
+                                Label(saved.config.hostname, systemImage: "server.rack")
+                            }
+                        }
+                    }
                 } label: {
                     Label("Add Server", systemImage: "plus")
                 }
             }
-            if UIDevice.isIPad {
-                ToolbarItem(placement: .navigationBarTrailing) {
+            if DeviceInfo.isIPad {
+                ToolbarItem(placement: .automatic) {
                     Button(action: { isShowingSettings = true }) {
                         Image(systemName: "gear")
                     }
@@ -103,7 +119,12 @@ struct ChannelListView: View {
             }
         }
         .sheet(isPresented: $isShowingSettings) {
-            SettingsView(pluginManager: manager.pluginManager!)
+            SettingsView(
+                pluginManager: manager.pluginManager!,
+                onConnectServer: { server in
+                    manager.addAndConnect(server)
+                }
+            )
         }
     }
 
@@ -120,12 +141,19 @@ struct ChannelListView: View {
             Circle()
                 .fill(statusColor(for: connection.state))
                 .frame(width: 8, height: 8)
-            Text(connection.serverConfig.hostname)
-                .font(.headline)
+            VStack(alignment: .leading, spacing: 0) {
+                Text(connection.serverConfig.hostname)
+                    .font(.headline)
+                if case .reconnecting(let attempt) = connection.state {
+                    Text("Reconnecting (\(attempt)/5)…")
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                }
+            }
             Spacer()
             Button {
                 if connection.state == .connected {
-                    connection.disconnect()
+                    Task { await connection.gracefulDisconnect(message: appSettings.quitMessage) }
                 } else {
                     Task { await connection.connect() }
                 }
@@ -232,10 +260,16 @@ struct ChannelListView: View {
         }
     }
 
+    private func isReconnecting(_ state: ConnectionState) -> Bool {
+        if case .reconnecting = state { return true }
+        return false
+    }
+
     private func statusColor(for state: ConnectionState) -> Color {
         switch state {
         case .connected: return .green
         case .connecting: return .yellow
+        case .reconnecting: return .orange
         case .disconnected: return .gray
         case .error: return .red
         }

@@ -19,6 +19,7 @@ enum UserAction: Equatable {
     case ban(channel: String, nickname: String)
     case kickBan(channel: String, nickname: String, reason: String?)
     case quit(message: String?)
+    case away(message: String?)
     case pluginCommand(command: String, args: String, target: String?)
     case serverCommand(raw: String)
 }
@@ -124,6 +125,12 @@ enum CommandRouter {
 
         case "quit":
             return .quit(message: args)
+
+        case "away":
+            return .away(message: args)
+
+        case "back":
+            return .away(message: nil)
 
         default:
             if pluginCommands.contains(command) {

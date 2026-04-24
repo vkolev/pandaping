@@ -6,8 +6,12 @@
 //
 import SwiftUI
 
-extension UIDevice {
+enum DeviceInfo {
     static var isIPad: Bool {
-        UIDevice.current.userInterfaceIdiom == .pad
+        #if canImport(UIKit)
+        return UIDevice.current.userInterfaceIdiom == .pad
+        #else
+        return false
+        #endif
     }
 }

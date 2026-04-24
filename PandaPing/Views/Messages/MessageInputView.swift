@@ -58,7 +58,7 @@ struct MessageInputView: View {
                         sendInput()
                     }
                     .onAppear {
-                        if UIDevice.isIPad {
+                        if DeviceInfo.isIPad {
                             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                                 isFocused = true
                             }

@@ -8,7 +8,7 @@
 import Foundation
 
 /// How the client should authenticate after connecting.
-enum AuthMethod: String, CaseIterable, Identifiable {
+enum AuthMethod: String, CaseIterable, Identifiable, Codable {
     case none
     case sasl
     case nickserv
@@ -25,7 +25,7 @@ enum AuthMethod: String, CaseIterable, Identifiable {
 }
 
 /// Configuration for an IRC server connection.
-struct IRCServer {
+struct IRCServer: Codable {
     /// Server hostname, e.g. "irc.libera.chat"
     let hostname: String
 

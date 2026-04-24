@@ -113,6 +113,7 @@ struct ContentView: View {
     ContentView(serverManager: ServerManager(transportFactory: { _ in
         PreviewTransport()
     }))
+    .environment(AppSettings())
 }
 
 /// Minimal transport for SwiftUI previews.
