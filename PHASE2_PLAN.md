@@ -2,7 +2,7 @@
 
 **Goal**: Design and implement a Lua-based plugin system for custom commands.
 
-**Status**: In Progress
+**Status**: In Progress -> Skip to finish Phase 3
 
 **Depends on**: Phase 1
 
@@ -58,7 +58,7 @@
 - [x] `pluginManager` wired through `PandaPingApp` → macOS `Settings` scene
 
 ### 6. Security & Sandboxing
-- [ ] Disable unsafe Lua functions (`os.execute`, `io.popen`)
+- [x] Disable unsafe Lua functions (`os.execute`, `io.popen`)
 - [ ] Limit plugin access to the filesystem/network
 - [ ] Add timeouts for long-running scripts
 

@@ -165,12 +165,19 @@ struct CommandRouterTests {
         #expect(action == nil)
     }
 
-    // MARK: - Unknown Commands
+    // MARK: - Server Commands
 
-    @Test("Unknown command returns unknown action")
-    func unknownCommand() {
-        let action = CommandRouter.parse("/foobar something", currentTarget: nil)
+    @Test("Unrecognized command is sent as raw server command")
+    func serverCommand() {
+        let action = CommandRouter.parse("/whois alice", currentTarget: nil)
 
-        #expect(action == .unknown(command: "foobar"))
+        #expect(action == .serverCommand(raw: "WHOIS alice"))
+    }
+
+    @Test("Unrecognized command with no args uppercases the command")
+    func serverCommandNoArgs() {
+        let action = CommandRouter.parse("/motd", currentTarget: nil)
+
+        #expect(action == .serverCommand(raw: "MOTD"))
     }
 }

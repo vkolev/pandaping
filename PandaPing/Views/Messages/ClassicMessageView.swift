@@ -17,6 +17,7 @@ struct ClassicMessageView: View {
     let subtitle: String?
     var currentTarget: String? = nil
     var onAction: ((UserAction) -> Void)? = nil
+    var onNicknameClicked: ((String) -> Void)? = nil
     var nicknames: [String] = []
     var channelNames: [String] = []
     var topic: String? = nil
@@ -33,7 +34,6 @@ struct ClassicMessageView: View {
                         Text("—")
                             .foregroundStyle(.tertiary)
                         ClickableTextView(text: topic)
-//                            .textSelection(.enabled)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
@@ -62,8 +62,11 @@ struct ClassicMessageView: View {
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 2) {
                             ForEach(Array(messages.enumerated()), id: \.offset) { index, message in
-                                ClassicMessageRow(message: message)
-                                    .id(index)
+                                ClassicMessageRow(
+                                    message: message,
+                                    onNicknameClicked: onNicknameClicked
+                                )
+                                .id(index)
                             }
                         }
                         .padding(.horizontal, 12)
@@ -90,6 +93,22 @@ struct ClassicMessageView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .font(.system(.body, design: .monospaced))
+        .environment(\.openURL, OpenURLAction { url in
+            guard url.scheme == "pandaping",
+                  let name = url.pathComponents.last else {
+                return .systemAction
+            }
+            switch url.host {
+            case "channel":
+                onAction?(.join(channel: "#\(name)"))
+                return .handled
+            case "mention":
+                onNicknameClicked?(name)
+                return .handled
+            default:
+                return .systemAction
+            }
+        })
     }
 }
 
@@ -97,6 +116,7 @@ struct ClassicMessageView: View {
 
 private struct ClassicMessageRow: View {
     let message: IRCMessage
+    var onNicknameClicked: ((String) -> Void)? = nil
 
     var body: some View {
         HStack(alignment: .firstTextBaseline, spacing: 0) {
@@ -108,9 +128,7 @@ private struct ClassicMessageRow: View {
                 // Action format: [HH:mm:ss] nick action text (all italic)
                 if let sender = senderText {
                     Text(" ")
-                    Text(sender)
-                        .foregroundStyle(NicknameColor.color(for: sender))
-                        .fontWeight(.medium)
+                    nickButton(sender)
                         .italic()
                     Text(" ")
                 }
@@ -121,9 +139,7 @@ private struct ClassicMessageRow: View {
                 if let sender = senderText {
                     Text(" <")
                         .foregroundStyle(.secondary)
-                    Text(sender)
-                        .foregroundStyle(NicknameColor.color(for: sender))
-                        .fontWeight(.medium)
+                    nickButton(sender)
                     Text("> ")
                         .foregroundStyle(.secondary)
                 } else {
@@ -134,10 +150,16 @@ private struct ClassicMessageRow: View {
         }
     }
 
+    private func nickButton(_ nick: String) -> some View {
+        Text(nick)
+            .foregroundStyle(NicknameColor.color(for: nick))
+            .fontWeight(.medium)
+            .onTapGesture {
+                onNicknameClicked?(nick)
+            }
+    }
+
     private var timestamp: String {
-        // IRC messages don't carry a local timestamp in our model,
-        // so we show the current time when displayed.
-        // In Phase 3 we'll add server-time (IRCv3) support.
         let formatter = DateFormatter()
         formatter.dateFormat = "[HH:mm:ss]"
         return formatter.string(from: Date())
@@ -148,26 +170,14 @@ private struct ClassicMessageRow: View {
     }
 
     private var messageText: String {
-        // For PRIVMSG, the message body is the last parameter.
-        // For NOTICE and other commands, use the last parameter too.
         if message.parameters.count >= 2 {
             return message.parameters.last ?? ""
         }
-        // Fallback: show all parameters joined
         return message.parameters.joined(separator: " ")
     }
 
-    private var messageBody: some View {
-        let segments = MessageTextParser.parse(messageText)
-        return segments.reduce(Text("")) { result, segment in
-            switch segment.kind {
-            case .plain:
-                return result + Text(segment.text)
-            case .channel:
-                return result + Text(segment.text).foregroundColor(.cyan).bold()
-            case .mention:
-                return result + Text(segment.text).foregroundColor(.orange).bold()
-            }
-        }
+    private var messageBody: Text {
+        let attributed = MessageTextParser.styledAttributedString(for: messageText)
+        return Text(attributed)
     }
 }

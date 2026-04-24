@@ -91,6 +91,18 @@ class IRCConnection: Identifiable {
         privateChats[nickname]?.unreadCount = 0
     }
 
+    /// Ensure a private chat entry exists for a nickname.
+    func ensurePrivateChat(for nickname: String) {
+        if privateChats[nickname] == nil {
+            privateChats[nickname] = IRCChannel(name: nickname)
+        }
+    }
+
+    /// Close a private chat, removing it from the sidebar.
+    func closePrivateChat(for nickname: String) {
+        privateChats.removeValue(forKey: nickname)
+    }
+
     // MARK: - User Actions
 
     /// Send a chat message to a target (channel or nickname) and add a local echo,
@@ -159,6 +171,16 @@ class IRCConnection: Identifiable {
         case .changeNick(let newNick):
             await send(.nick(newNick))
 
+        case .kick(let channel, let nick, let reason):
+            await send(.kick(channel: channel, nickname: nick, reason: reason))
+
+        case .ban(let channel, let nick):
+            await send(.mode(target: channel, flags: "+b", parameter: "\(nick)!*@*"))
+
+        case .kickBan(let channel, let nick, let reason):
+            await send(.mode(target: channel, flags: "+b", parameter: "\(nick)!*@*"))
+            await send(.kick(channel: channel, nickname: nick, reason: reason))
+
         case .quit(let message):
             await send(.quit(message: message))
             disconnect()
@@ -166,8 +188,8 @@ class IRCConnection: Identifiable {
         case .pluginCommand(let command, let args, let target):
             try? pluginManager?.executeCommand(command, args: args, target: target, delegate: self)
 
-        case .unknown:
-            break
+        case .serverCommand(let raw):
+            await send(.raw(raw))
         }
     }
 
@@ -287,6 +309,31 @@ class IRCConnection: Identifiable {
                 enriched.channel = privateChats[senderNick]
                 privateChats[senderNick]?.messages.append(enriched)
                 privateChats[senderNick]?.unreadCount += 1
+            }
+
+        case "MODE":
+            guard message.parameters.count >= 3 else {
+                serverMessages.append(message)
+                break
+            }
+            let channel = message.parameters[0]
+            let flags = message.parameters[1]
+            let targetNick = message.parameters[2]
+            guard joinedChannels[channel] != nil,
+                  let idx = joinedChannels[channel]?.users.firstIndex(where: { $0.nickname == targetNick }) else {
+                serverMessages.append(message)
+                break
+            }
+            let modeMap: [Character: String] = ["o": "@", "h": "%", "v": "+"]
+            if flags.count == 2, let sign = flags.first, let modeChar = flags.last,
+               let prefix = modeMap[modeChar] {
+                if sign == "+" {
+                    joinedChannels[channel]?.users[idx].modePrefix = prefix
+                } else if sign == "-" {
+                    if joinedChannels[channel]?.users[idx].modePrefix == prefix {
+                        joinedChannels[channel]?.users[idx].modePrefix = nil
+                    }
+                }
             }
 
         case "NICK":

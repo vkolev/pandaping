@@ -11,10 +11,10 @@
 ## Tasks
 
 ### 1. Message Formatting
-- [ ] Highlight mentions (`@nick`) and hashtags (`#channel`)
-- [ ] Clickable nicks and channels in messages
-- [ ] Support for IRC formatting (bold, italics, colors)
-- [ ] Add clickable links and inline images (optional)
+- [x] Highlight mentions (`@nick`) and hashtags (`#channel`)
+- [x] Clickable nicks and channels in messages
+- [x] Support for IRC formatting (bold, italics, colors)
+- [x] Add clickable links and inline images (optional)
 
 ### 2. Notifications
 - [ ] Use `UserNotifications` for mentions and private messages

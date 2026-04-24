@@ -195,6 +195,16 @@ struct ChannelListView: View {
         .onHover { hovering in
             isHovering = hovering
         }
+        .contextMenu {
+            Button(role: .destructive) {
+                if manager.selection == .privateMessage(serverIndex: serverIndex, nickname: chat.name) {
+                    manager.selection = nil
+                }
+                manager.connections[serverIndex].closePrivateChat(for: chat.name)
+            } label: {
+                Label("Close Chat", systemImage: "xmark.circle")
+            }
+        }
     }
 
     @ViewBuilder

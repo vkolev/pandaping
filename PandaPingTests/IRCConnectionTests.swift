@@ -386,6 +386,18 @@ struct IRCConnectionTests {
         #expect(connection.state == .disconnected)
     }
 
+    @Test("executeAction serverCommand sends raw line to server")
+    @MainActor
+    func executeServerCommand() async {
+        let mock = MockIRCTransport()
+        let server = IRCServer(hostname: "irc.test.com", nickname: "testbot")
+        let connection = IRCConnection(server: server, transport: mock)
+
+        await connection.executeAction(.serverCommand(raw: "WHOIS alice"))
+
+        #expect(mock.sentLines.contains("WHOIS alice"))
+    }
+
     // MARK: - Highlight and Channel Enrichment
 
     @Test("Sets isHighlighted when message mentions our nickname")
