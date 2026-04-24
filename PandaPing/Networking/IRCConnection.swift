@@ -39,6 +39,7 @@ class IRCConnection: Identifiable {
     private let transport: any IRCTransport
     private var processingTask: Task<Void, Never>?
     private var pendingNames: [String: [ChannelUser]] = [:]
+    private var awaitingSASL = false
 
     init(server: IRCServer, transport: any IRCTransport) {
         self.serverConfig = server
@@ -50,8 +51,19 @@ class IRCConnection: Identifiable {
 
     func connect() async {
         state = .connecting
+        awaitingSASL = false
         do {
             try await transport.connect()
+
+            if let pass = serverConfig.serverPassword, !pass.isEmpty {
+                try await transport.sendLine(IRCCommand.pass(pass).rawString)
+            }
+
+            if serverConfig.authMethod == .sasl {
+                awaitingSASL = true
+                try await transport.sendLine(IRCCommand.cap(subcommand: "LS", parameters: "302").rawString)
+            }
+
             try await transport.sendLine(IRCCommand.nick(nickname).rawString)
             try await transport.sendLine(IRCCommand.user(username: nickname, realname: "PandaPing").rawString)
             startProcessing()
@@ -202,6 +214,48 @@ class IRCConnection: Identifiable {
 
     // MARK: - Private
 
+    private func handleCAP(_ message: IRCMessage) async {
+        // CAP params: [<nick-or-*>, <subcommand>, ...]
+        guard message.parameters.count >= 2 else { return }
+        let subcommand = message.parameters[1]
+
+        switch subcommand {
+        case "LS":
+            let capabilities = message.parameters.last ?? ""
+            if capabilities.contains("sasl") {
+                try? await transport.sendLine(IRCCommand.cap(subcommand: "REQ", parameters: "sasl").rawString)
+            } else {
+                awaitingSASL = false
+                try? await transport.sendLine(IRCCommand.cap(subcommand: "END").rawString)
+            }
+
+        case "ACK":
+            let acknowledged = message.parameters.last ?? ""
+            if acknowledged.contains("sasl") {
+                try? await transport.sendLine(IRCCommand.authenticate("PLAIN").rawString)
+            }
+
+        case "NAK":
+            awaitingSASL = false
+            try? await transport.sendLine(IRCCommand.cap(subcommand: "END").rawString)
+
+        default:
+            break
+        }
+    }
+
+    private func handleAuthenticate(_ message: IRCMessage) async {
+        guard message.parameters.first == "+" else { return }
+
+        let username = serverConfig.saslUsername ?? serverConfig.nickname
+        let password = serverConfig.saslPassword ?? ""
+
+        // SASL PLAIN: base64("\0<username>\0<password>")
+        let payload = "\0\(username)\0\(password)"
+        let encoded = Data(payload.utf8).base64EncodedString()
+        try? await transport.sendLine(IRCCommand.authenticate(encoded).rawString)
+    }
+
     private func startProcessing() {
         processingTask = Task { [weak self, transport] in
             for await line in transport.lines {
@@ -221,9 +275,34 @@ class IRCConnection: Identifiable {
             let server = message.parameters.first ?? ""
             try? await transport.sendLine(IRCCommand.pong(server: server).rawString)
 
+        case "CAP":
+            await handleCAP(message)
+
+        case "AUTHENTICATE":
+            await handleAuthenticate(message)
+
+        // SASL success
+        case "900", "903":
+            awaitingSASL = false
+            serverMessages.append(message)
+            try? await transport.sendLine(IRCCommand.cap(subcommand: "END").rawString)
+
+        // SASL failure
+        case "902", "904", "905", "906":
+            awaitingSASL = false
+            serverMessages.append(message)
+            try? await transport.sendLine(IRCCommand.cap(subcommand: "END").rawString)
+
         case "001":
             state = .connected
             serverMessages.append(message)
+
+            if serverConfig.authMethod == .nickserv,
+               let pass = serverConfig.nickservPassword, !pass.isEmpty {
+                let identifyMessage = "IDENTIFY \(pass)"
+                try? await transport.sendLine(IRCCommand.privmsg(target: "NickServ", message: identifyMessage).rawString)
+            }
+
             for channel in serverConfig.channels {
                 try? await transport.sendLine(IRCCommand.join(channel: channel).rawString)
             }

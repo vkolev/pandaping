@@ -52,7 +52,8 @@ struct ContentView: View {
                 Divider()
                 UserListView(
                     users: channel?.users ?? [],
-                    currentUserIsOp: channel?.users.first { $0.nickname == connection.nickname }?.modePrefix == "@",
+                    currentUserIsOp: channel?.users.first { $0.nickname == connection.nickname
+ }?.modePrefix == "@",
                     onNicknameClicked: { nick in
                         openPrivateChat(nick, serverIndex: serverIndex, connection: connection)
                     },
@@ -64,6 +65,12 @@ struct ContentView: View {
                     },
                     onKickBan: { nick in
                         Task { await connection.executeAction(.kickBan(channel: name, nickname: nick, reason: nil)) }
+                    },
+                    onWhois: { nick in
+                        Task {
+                            await connection
+                                .executeAction(.serverCommand(raw: "WHOIS \(nick)"))
+                        }
                     }
                 )
             }

@@ -18,6 +18,9 @@ enum IRCCommand {
     case mode(target: String, flags: String, parameter: String? = nil)
     case quit(message: String? = nil)
     case user(username: String, realname: String)
+    case pass(String)
+    case cap(subcommand: String, parameters: String? = nil)
+    case authenticate(String)
     case raw(String)
 
     /// The raw IRC protocol string ready to send over the wire.
@@ -61,6 +64,18 @@ enum IRCCommand {
 
         case .user(let username, let realname):
             return "USER \(username) 0 * :\(realname)"
+
+        case .pass(let password):
+            return "PASS \(password)"
+
+        case .cap(let subcommand, let parameters):
+            if let parameters {
+                return "CAP \(subcommand) :\(parameters)"
+            }
+            return "CAP \(subcommand)"
+
+        case .authenticate(let response):
+            return "AUTHENTICATE \(response)"
 
         case .raw(let line):
             return line

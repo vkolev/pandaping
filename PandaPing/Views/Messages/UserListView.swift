@@ -15,6 +15,7 @@ struct UserListView: View {
     var onKick: ((String) -> Void)? = nil
     var onBan: ((String) -> Void)? = nil
     var onKickBan: ((String) -> Void)? = nil
+    var onWhois: ((String) -> Void)? = nil
 
     var body: some View {
         VStack(spacing: 0) {
@@ -42,7 +43,8 @@ struct UserListView: View {
                             onNicknameClicked: onNicknameClicked,
                             onKick: onKick,
                             onBan: onBan,
-                            onKickBan: onKickBan
+                            onKickBan: onKickBan,
+                            onWhois: onWhois,
                         )
                     }
                 }
@@ -80,6 +82,7 @@ private struct UserRow: View {
     var onKick: ((String) -> Void)?
     var onBan: ((String) -> Void)?
     var onKickBan: ((String) -> Void)?
+    var onWhois: ((String) -> Void)?
 
     @State private var isHovered = false
 
@@ -104,6 +107,9 @@ private struct UserRow: View {
         .contextMenu {
             Button("Private Message") {
                 onNicknameClicked?(user.nickname)
+            }
+            Button("Whois") {
+                onWhois?(user.nickname)
             }
             if currentUserIsOp {
                 Divider()
