@@ -22,49 +22,129 @@ struct MessageInputView: View {
     // Tab completion state
     @State private var tabCycleIndex = 0
     @State private var tabOriginalText: String?
+    @State private var isTabCompleting = false
 
     var body: some View {
-        HStack(spacing: 8) {
-            TextField("Message \(currentTarget ?? "")...", text: $inputText)
-                .textFieldStyle(.plain)
-                .font(.system(.body, design: .monospaced))
-                .focused($isFocused)
-                .onSubmit {
-                    sendInput()
-                }
-                #if os(macOS)
-                .onKeyPress(.tab) {
-                    performTabCompletion()
-                    return .handled
-                }
-                #endif
-                .onChange(of: inputText) { oldValue, newValue in
-                    // Reset tab state when user types manually (not from tab completion)
-                    if tabOriginalText != nil && newValue != oldValue {
-                        // Only reset if this wasn't a tab-triggered change
-                        // We detect this by checking if the new value doesn't match
-                        // what tab completion would have produced
+        VStack(spacing: 0) {
+            if !mentionSuggestions.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(mentionSuggestions, id: \.self) { nick in
+                            Button {
+                                applyMentionSuggestion(nick)
+                            } label: {
+                                Text("@\(nick)")
+                                    .font(.system(.callout, design: .monospaced))
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 4)
+                                    .background(.quaternary)
+                                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                            }
+                            .buttonStyle(.plain)
+                        }
                     }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
                 }
-
-            Button {
-                sendInput()
-            } label: {
-                Image(systemName: "paperplane.fill")
+                Divider()
             }
-            .buttonStyle(.borderless)
-            .disabled(inputText.trimmingCharacters(in: .whitespaces).isEmpty)
+
+            HStack(spacing: 8) {
+                TextField("Message \(currentTarget ?? "")...", text: $inputText)
+                    .textFieldStyle(.plain)
+                    .font(.system(.body, design: .monospaced))
+                    .focused($isFocused)
+                    .onSubmit {
+                        sendInput()
+                    }
+                    #if os(macOS)
+                    .onKeyPress(.tab) {
+                        performTabCompletion()
+                        return .handled
+                    }
+                    .onKeyPress(phases: .down) { keyPress in
+                        guard keyPress.modifiers == .control else { return .ignored }
+                        let displayChar: Character? = switch keyPress.key {
+                        case KeyEquivalent("b"): "\u{2402}"
+                        case KeyEquivalent("k"): "\u{2403}"
+                        case KeyEquivalent("o"): "\u{240F}"
+                        case KeyEquivalent("i"): "\u{241D}"
+                        case KeyEquivalent("u"): "\u{241F}"
+                        case KeyEquivalent("r"): "\u{2416}"
+                        default: nil
+                        }
+                        if let displayChar {
+                            inputText.append(displayChar)
+                            return .handled
+                        }
+                        return .ignored
+                    }
+                    #endif
+                    .onChange(of: inputText) {
+                        if isTabCompleting {
+                            isTabCompleting = false
+                        } else {
+                            resetTabState()
+                        }
+                    }
+
+                Button {
+                    sendInput()
+                } label: {
+                    Image(systemName: "paperplane.fill")
+                }
+                .buttonStyle(.borderless)
+                .disabled(inputText.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
         .onAppear {
             isFocused = true
         }
     }
 
+    private var mentionSuggestions: [String] {
+        guard let atRange = inputText.range(of: "@", options: .backwards),
+              atRange.lowerBound == inputText.startIndex ||
+              inputText[inputText.index(before: atRange.lowerBound)] == " " else {
+            return []
+        }
+        let partial = String(inputText[atRange.upperBound...])
+        guard !partial.isEmpty, !partial.contains(" ") else { return [] }
+        return nicknames
+            .filter { $0.lowercased().hasPrefix(partial.lowercased()) }
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+
+    private func applyMentionSuggestion(_ nick: String) {
+        guard let atRange = inputText.range(of: "@", options: .backwards) else { return }
+        let prefix = String(inputText[..<atRange.lowerBound])
+        isTabCompleting = true
+        inputText = prefix + "@\(nick) "
+    }
+
+    private static let displayToControlMap: [(display: String, control: String)] = [
+        ("\u{2402}", "\u{02}"),   // ␂ → Bold
+        ("\u{2403}", "\u{03}"),   // ␃ → Color
+        ("\u{240F}", "\u{0F}"),   // ␏ → Reset
+        ("\u{241D}", "\u{1D}"),   // ␝ → Italic
+        ("\u{241F}", "\u{1F}"),   // ␟ → Underline
+        ("\u{2416}", "\u{16}"),   // ␖ → Reverse
+    ]
+
+    private static func displayToIRC(_ text: String) -> String {
+        var result = text
+        for (display, control) in displayToControlMap {
+            result = result.replacingOccurrences(of: display, with: control)
+        }
+        return result
+    }
+
     private func sendInput() {
         resetTabState()
-        guard let action = CommandRouter.parse(inputText, currentTarget: currentTarget) else {
+        let ircText = Self.displayToIRC(inputText)
+        guard let action = CommandRouter.parse(ircText, currentTarget: currentTarget) else {
             return
         }
         onAction(action)
@@ -90,6 +170,7 @@ struct MessageInputView: View {
             channels: channelNames,
             cycleIndex: tabCycleIndex
         ) {
+            isTabCompleting = true
             inputText = result.text
         }
     }

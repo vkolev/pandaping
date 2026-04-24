@@ -50,36 +50,32 @@ enum TabCompleter {
         guard !partial.isEmpty else { return nil }
 
         let prefix = String(beforeCursor[beforeCursor.startIndex..<wordStart])
-        let isStartOfLine = prefix.trimmingCharacters(in: .whitespaces).isEmpty
 
-        // Choose candidate list based on whether the partial starts with #
+        // Choose candidate list based on prefix character
         let candidates: [String]
+        let completionPrefix: String
         if partial.hasPrefix("#") {
+            completionPrefix = ""
             candidates = channels
-                .filter { $0.localizedCaseInsensitiveContains(partial) && $0.lowercased().hasPrefix(partial.lowercased()) }
-                .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
-        } else {
-            candidates = nicknames
                 .filter { $0.lowercased().hasPrefix(partial.lowercased()) }
                 .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+        } else if partial.hasPrefix("@") {
+            completionPrefix = "@"
+            let namePrefix = String(partial.dropFirst())
+            guard !namePrefix.isEmpty else { return nil }
+            candidates = nicknames
+                .filter { $0.lowercased().hasPrefix(namePrefix.lowercased()) }
+                .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+        } else {
+            return nil
         }
 
         guard !candidates.isEmpty else { return nil }
 
         let selected = candidates[cycleIndex % candidates.count]
 
-        // Suffix: ": " at start of line for nicks (IRC convention), " " mid-line
-        let suffix: String
-        if partial.hasPrefix("#") {
-            suffix = " "
-        } else if isStartOfLine {
-            suffix = ": "
-        } else {
-            suffix = " "
-        }
-
-        let completed = prefix + selected + suffix + afterCursor
-        let newCursor = (prefix + selected + suffix).count
+        let completed = prefix + completionPrefix + selected + " " + afterCursor
+        let newCursor = (prefix + completionPrefix + selected + " ").count
 
         return CompletionResult(text: completed, cursorOffset: newCursor)
     }
