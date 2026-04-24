@@ -15,9 +15,12 @@ enum UserAction: Equatable {
     case part(channel: String, message: String?)
     case privateMessage(target: String, text: String)
     case changeNick(String)
+    case kick(channel: String, nickname: String, reason: String?)
+    case ban(channel: String, nickname: String)
+    case kickBan(channel: String, nickname: String, reason: String?)
     case quit(message: String?)
     case pluginCommand(command: String, args: String, target: String?)
-    case unknown(command: String)
+    case serverCommand(raw: String)
 }
 
 /// Parses user input into `UserAction`s.
@@ -95,6 +98,30 @@ enum CommandRouter {
                   !newNick.isEmpty else { return nil }
             return .changeNick(newNick)
 
+        case "kick":
+            guard let args else { return nil }
+            let argParts = args.split(separator: " ", maxSplits: 1)
+            guard !argParts.isEmpty else { return nil }
+            let nick = String(argParts[0])
+            let reason = argParts.count > 1 ? String(argParts[1]) : nil
+            guard let target = currentTarget else { return nil }
+            return .kick(channel: target, nickname: nick, reason: reason)
+
+        case "ban":
+            guard let nick = args?.trimmingCharacters(in: .whitespaces),
+                  !nick.isEmpty,
+                  let target = currentTarget else { return nil }
+            return .ban(channel: target, nickname: nick)
+
+        case "kickban":
+            guard let args else { return nil }
+            let argParts = args.split(separator: " ", maxSplits: 1)
+            guard !argParts.isEmpty else { return nil }
+            let nick = String(argParts[0])
+            let reason = argParts.count > 1 ? String(argParts[1]) : nil
+            guard let target = currentTarget else { return nil }
+            return .kickBan(channel: target, nickname: nick, reason: reason)
+
         case "quit":
             return .quit(message: args)
 
@@ -102,7 +129,8 @@ enum CommandRouter {
             if pluginCommands.contains(command) {
                 return .pluginCommand(command: command, args: args ?? "", target: currentTarget)
             }
-            return .unknown(command: command)
+            let raw = args.map { "\(command.uppercased()) \($0)" } ?? command.uppercased()
+            return .serverCommand(raw: raw)
         }
     }
 }

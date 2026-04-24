@@ -354,7 +354,7 @@ struct LuaEngineTests {
         #expect(noTarget == .pluginCommand(command: "dice", args: "6", target: nil))
 
         let unknown = CommandRouter.parse("/foobar", currentTarget: nil)
-        #expect(unknown == .unknown(command: "foobar"))
+        #expect(unknown == .serverCommand(raw: "FOOBAR"))
     }
 
     // MARK: - Target Passing
