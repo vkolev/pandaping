@@ -14,6 +14,7 @@ struct ChannelListView: View {
     @State private var showingAddServer = false
     @State private var showingJoinChannel = false
     @State private var currentActionIndex = 0
+    @State private var isShowingSettings = false
 
     var body: some View {
         List {
@@ -83,6 +84,13 @@ struct ChannelListView: View {
                     Label("Add Server", systemImage: "plus")
                 }
             }
+            if UIDevice.isIPad {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: { isShowingSettings = true }) {
+                        Image(systemName: "gear")
+                    }
+                }
+            }
         }
         .sheet(isPresented: $showingAddServer) {
             AddServerView { server in
@@ -93,6 +101,9 @@ struct ChannelListView: View {
             JoinChannelView { channelToJoin in
                 await manager.connections[currentActionIndex].executeAction(.join(channel: channelToJoin))
             }
+        }
+        .sheet(isPresented: $isShowingSettings) {
+            SettingsView(pluginManager: manager.pluginManager!)
         }
     }
 

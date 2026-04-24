@@ -57,6 +57,13 @@ struct MessageInputView: View {
                     .onSubmit {
                         sendInput()
                     }
+                    .onAppear {
+                        if UIDevice.isIPad {
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                                isFocused = true
+                            }
+                        }
+                    }
                     #if os(macOS)
                     .onKeyPress(.tab) {
                         performTabCompletion()
