@@ -7,8 +7,25 @@
 
 import Foundation
 
+/// How the client should authenticate after connecting.
+enum AuthMethod: String, CaseIterable, Identifiable, Codable {
+    case none
+    case sasl
+    case nickserv
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .none:     return "None"
+        case .sasl:     return "SASL"
+        case .nickserv: return "NickServ"
+        }
+    }
+}
+
 /// Configuration for an IRC server connection.
-struct IRCServer {
+struct IRCServer: Codable {
     /// Server hostname, e.g. "irc.libera.chat"
     let hostname: String
 
@@ -23,4 +40,20 @@ struct IRCServer {
 
     /// Channels to auto-join on connect
     var channels: [String] = []
+
+    // MARK: - Authentication
+
+    var authMethod: AuthMethod = .none
+
+    /// Server password sent via PASS before registration.
+    var serverPassword: String?
+
+    /// Username for SASL PLAIN authentication (defaults to nickname if nil).
+    var saslUsername: String?
+
+    /// Password for SASL PLAIN authentication.
+    var saslPassword: String?
+
+    /// Password sent to NickServ after registration completes.
+    var nickservPassword: String?
 }

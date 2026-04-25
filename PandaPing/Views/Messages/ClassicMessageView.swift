@@ -22,6 +22,8 @@ struct ClassicMessageView: View {
     var channelNames: [String] = []
     var topic: String? = nil
 
+    @Environment(AppSettings.self) private var appSettings
+
     var body: some View {
         VStack(spacing: 0) {
             // Header
@@ -60,7 +62,7 @@ struct ClassicMessageView: View {
             } else {
                 ScrollViewReader { proxy in
                     ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 2) {
+                        LazyVStack(alignment: .leading, spacing: appSettings.messageLineSpacing) {
                             ForEach(Array(messages.enumerated()), id: \.offset) { index, message in
                                 ClassicMessageRow(
                                     message: message,
@@ -92,7 +94,7 @@ struct ClassicMessageView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .font(.system(.body, design: .monospaced))
+        .font(appSettings.messageFont)
         .environment(\.openURL, OpenURLAction { url in
             guard url.scheme == "pandaping",
                   let name = url.pathComponents.last else {
@@ -159,10 +161,14 @@ private struct ClassicMessageRow: View {
             }
     }
 
-    private var timestamp: String {
+    private static let timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "[HH:mm:ss]"
-        return formatter.string(from: Date())
+        return formatter
+    }()
+
+    private var timestamp: String {
+        Self.timeFormatter.string(from: message.receivedAt)
     }
 
     private var senderText: String? {

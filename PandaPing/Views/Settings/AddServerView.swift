@@ -11,6 +11,7 @@ import SwiftUI
 struct AddServerView: View {
     @Environment(\.dismiss) private var dismiss
 
+    var confirmTitle: String = "Connect"
     var onConnect: (IRCServer) -> Void
 
     @State private var hostname = ""
@@ -18,6 +19,12 @@ struct AddServerView: View {
     @State private var nickname = ""
     @State private var useSSL = false
     @State private var channelsText = ""
+
+    @State private var authMethod: AuthMethod = .none
+    @State private var serverPassword = ""
+    @State private var saslUsername = ""
+    @State private var saslPassword = ""
+    @State private var nickservPassword = ""
 
     var body: some View {
         NavigationStack {
@@ -53,6 +60,29 @@ struct AddServerView: View {
                         .disableAutocorrection(true)
                 }
 
+                Section("Authentication") {
+                    Picker("Method", selection: $authMethod) {
+                        ForEach(AuthMethod.allCases) { method in
+                            Text(method.displayName).tag(method)
+                        }
+                    }
+
+                    SecureField("Server Password", text: $serverPassword)
+
+                    if authMethod == .sasl {
+                        TextField("SASL Username", text: $saslUsername)
+                        #if os(iOS)
+                            .textInputAutocapitalization(.never)
+                        #endif
+                            .disableAutocorrection(true)
+                        SecureField("SASL Password", text: $saslPassword)
+                    }
+
+                    if authMethod == .nickserv {
+                        SecureField("NickServ Password", text: $nickservPassword)
+                    }
+                }
+
                 Section {
                     TextField("Channels (comma-separated)", text: $channelsText)
                     #if os(iOS)
@@ -78,7 +108,7 @@ struct AddServerView: View {
                     }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Connect") {
+                    Button(confirmTitle) {
                         connect()
                     }
                     .disabled(!isValid)
@@ -109,6 +139,16 @@ struct AddServerView: View {
         server.port = Int(port) ?? 6667
         server.useSSL = useSSL
         server.channels = channels
+        server.authMethod = authMethod
+        server.serverPassword = serverPassword.isEmpty ? nil : serverPassword
+
+        if authMethod == .sasl {
+            server.saslUsername = saslUsername.isEmpty ? nil : saslUsername
+            server.saslPassword = saslPassword.isEmpty ? nil : saslPassword
+        }
+        if authMethod == .nickserv {
+            server.nickservPassword = nickservPassword.isEmpty ? nil : nickservPassword
+        }
 
         onConnect(server)
         dismiss()

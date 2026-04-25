@@ -8,8 +8,212 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Main settings screen. On macOS, presented via the Settings scene (⌘,).
+/// Main settings screen with tabs for Appearance, Servers, and Plugins.
 struct SettingsView: View {
+    var pluginManager: PluginManager
+    var onConnectServer: ((IRCServer) -> Void)? = nil
+
+    @Environment(AppSettings.self) private var appSettings
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        #if os(iOS)
+        NavigationStack {
+            settingsContent
+                .navigationTitle("Settings")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button("Done") { dismiss() }
+                    }
+                }
+        }
+        #else
+        settingsContent
+        #endif
+    }
+
+    private var settingsContent: some View {
+        TabView {
+            AppearanceSettingsView()
+                .tabItem { Label("Appearance", systemImage: "paintbrush") }
+
+            ServerSettingsView(onConnect: onConnectServer)
+                .tabItem { Label("Servers", systemImage: "server.rack") }
+
+            PluginSettingsView(pluginManager: pluginManager)
+                .tabItem { Label("Plugins", systemImage: "puzzlepiece") }
+
+            AdvancedSettingsView()
+                .tabItem { Label("Advanced", systemImage: "gearshape.2") }
+        }
+        .onDisappear { appSettings.save() }
+        #if os(macOS)
+        .frame(minWidth: 500, minHeight: 400)
+        #endif
+    }
+}
+
+// MARK: - Appearance Settings
+
+struct AppearanceSettingsView: View {
+    @Environment(AppSettings.self) private var appSettings
+
+    var body: some View {
+        @Bindable var settings = appSettings
+
+        Form {
+            Section("Theme") {
+                Picker("Appearance", selection: $settings.appearance) {
+                    ForEach(AppAppearance.allCases) { option in
+                        Text(option.displayName).tag(option)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: settings.appearance) {
+                    appSettings.save()
+                }
+            }
+
+            Section("Messages") {
+                Picker("Font", selection: $settings.messageFontName) {
+                    ForEach(MessageFont.allCases) { font in
+                        Text(font.rawValue).tag(font.rawValue)
+                    }
+                }
+
+                HStack {
+                    Text("Font Size")
+                    Slider(value: $settings.messageFontSize, in: 9...24, step: 1)
+                    Text("\(Int(settings.messageFontSize)) pt")
+                        .monospacedDigit()
+                        .frame(width: 40, alignment: .trailing)
+                }
+
+                HStack {
+                    Text("Line Spacing")
+                    Slider(value: $settings.messageLineSpacing, in: 0...10, step: 1)
+                    Text("\(Int(settings.messageLineSpacing)) pt")
+                        .monospacedDigit()
+                        .frame(width: 40, alignment: .trailing)
+                }
+            }
+
+            Section("Preview") {
+                VStack(alignment: .leading, spacing: settings.messageLineSpacing) {
+                    Text("[12:34:56] <alice> Hey everyone!")
+                    Text("[12:34:58] <bob> Hello alice, welcome back!")
+                    Text("[12:35:01] <alice> Thanks! What did I miss?")
+                }
+                .font(settings.messageFont)
+                .padding(.vertical, 4)
+            }
+        }
+        .formStyle(.grouped)
+    }
+}
+
+// MARK: - Server Settings
+
+struct ServerSettingsView: View {
+    @Environment(AppSettings.self) private var appSettings
+    var onConnect: ((IRCServer) -> Void)?
+
+    @State private var showingAddServer = false
+
+    var body: some View {
+        Form {
+            Section {
+                if appSettings.savedServers.isEmpty {
+                    Text("No saved servers")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(appSettings.savedServers) { server in
+                        savedServerRow(server)
+                    }
+                    .onDelete { indexSet in
+                        for index in indexSet {
+                            appSettings.removeSavedServer(id: appSettings.savedServers[index].id)
+                        }
+                    }
+                }
+
+                Button {
+                    showingAddServer = true
+                } label: {
+                    Label("Add Server…", systemImage: "plus")
+                }
+            } header: {
+                Text("Saved Servers")
+            } footer: {
+                Text("Servers marked with ⚡ will connect automatically on launch.")
+                    .font(.caption)
+            }
+        }
+        .formStyle(.grouped)
+        .sheet(isPresented: $showingAddServer) {
+            AddServerView(confirmTitle: "Save") { server in
+                appSettings.addSavedServer(server)
+            }
+        }
+    }
+
+    private func savedServerRow(_ server: SavedServer) -> some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
+                    Text(server.config.hostname)
+                        .font(.headline)
+                    if server.connectOnStartup {
+                        Image(systemName: "bolt.fill")
+                            .foregroundStyle(.yellow)
+                            .font(.caption)
+                    }
+                }
+                Text("\(server.config.nickname) • Port \(server.config.port)\(server.config.useSSL ? " • SSL" : "")")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if !server.config.channels.isEmpty {
+                    Text(server.config.channels.joined(separator: ", "))
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+            }
+
+            Spacer()
+
+            if let onConnect {
+                Button("Connect") {
+                    onConnect(server.config)
+                }
+                .buttonStyle(.bordered)
+            }
+        }
+        .contextMenu {
+            Button {
+                appSettings.toggleStartup(for: server.id)
+            } label: {
+                if server.connectOnStartup {
+                    Label("Disable Auto-Connect", systemImage: "bolt.slash")
+                } else {
+                    Label("Enable Auto-Connect", systemImage: "bolt.fill")
+                }
+            }
+
+            Divider()
+
+            Button(role: .destructive) {
+                appSettings.removeSavedServer(id: server.id)
+            } label: {
+                Label("Remove Server", systemImage: "trash")
+            }
+        }
+    }
+}
+
+// MARK: - Plugin Settings
+
+struct PluginSettingsView: View {
     var pluginManager: PluginManager
 
     @State private var showingFileImporter = false
@@ -17,7 +221,6 @@ struct SettingsView: View {
 
     var body: some View {
         Form {
-            // MARK: Plugins
             Section {
                 if pluginManager.plugins.isEmpty {
                     Text("No plugins found")
@@ -78,12 +281,7 @@ struct SettingsView: View {
                 Text(importError)
             }
         }
-        #if os(macOS)
-        .frame(minWidth: 450, minHeight: 300)
-        #endif
     }
-
-    // MARK: - Subviews
 
     private func pluginRow(_ plugin: PluginInfo) -> some View {
         HStack(alignment: .top) {
@@ -126,5 +324,43 @@ struct SettingsView: View {
             .labelsHidden()
             .toggleStyle(.switch)
         }
+    }
+}
+
+// MARK: - Advanced Settings
+
+struct AdvancedSettingsView: View {
+    @Environment(AppSettings.self) private var appSettings
+
+    var body: some View {
+        @Bindable var settings = appSettings
+
+        Form {
+            Section {
+                TextField("Quit Message", text: $settings.quitMessage)
+                    .textFieldStyle(.roundedBorder)
+                    .onChange(of: settings.quitMessage) {
+                        appSettings.save()
+                    }
+            } header: {
+                Text("Connection")
+            } footer: {
+                Text("Sent to the server when you disconnect. Other users see this as your quit reason.")
+                    .font(.caption)
+            }
+
+            Section {
+                Toggle("Log IRC Traffic", isOn: $settings.ircLoggingEnabled)
+                    .onChange(of: settings.ircLoggingEnabled) {
+                        appSettings.save()
+                    }
+            } header: {
+                Text("Debugging")
+            } footer: {
+                Text("Logs all incoming and outgoing IRC messages to the system console. View logs in Console.app with the \"IRC\" category.")
+                    .font(.caption)
+            }
+        }
+        .formStyle(.grouped)
     }
 }

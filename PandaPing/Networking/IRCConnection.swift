@@ -14,6 +14,7 @@ enum ConnectionState: Equatable {
     case disconnected
     case connecting
     case connected
+    case reconnecting(attempt: Int)
     case error(String)
 }
 
@@ -32,6 +33,7 @@ class IRCConnection: Identifiable {
     private(set) var privateChats: [String: IRCChannel] = [:]
     private(set) var serverMessages: [IRCMessage] = []
     private(set) var nickname: String
+    private(set) var isAway: Bool = false
 
     /// The plugin manager shared across all connections.
     var pluginManager: PluginManager?
@@ -39,6 +41,12 @@ class IRCConnection: Identifiable {
     private let transport: any IRCTransport
     private var processingTask: Task<Void, Never>?
     private var pendingNames: [String: [ChannelUser]] = [:]
+    private var awaitingSASL = false
+    private var isIntentionalDisconnect = false
+    private var channelsToRejoin: [String]?
+
+    private static let maxReconnectAttempts = 5
+    private static let baseReconnectDelay: TimeInterval = 2
 
     init(server: IRCServer, transport: any IRCTransport) {
         self.serverConfig = server
@@ -49,26 +57,53 @@ class IRCConnection: Identifiable {
     // MARK: - Connection Lifecycle
 
     func connect() async {
+        isIntentionalDisconnect = false
+        processingTask?.cancel()
+        processingTask = nil
         state = .connecting
+        awaitingSASL = false
+        IRCLogger.event("Connecting", server: serverConfig.hostname)
         do {
             try await transport.connect()
+
+            if let pass = serverConfig.serverPassword, !pass.isEmpty {
+                try await transport.sendLine(IRCCommand.pass(pass).rawString)
+            }
+
+            if serverConfig.authMethod == .sasl {
+                awaitingSASL = true
+                try await transport.sendLine(IRCCommand.cap(subcommand: "LS", parameters: "302").rawString)
+            }
+
             try await transport.sendLine(IRCCommand.nick(nickname).rawString)
             try await transport.sendLine(IRCCommand.user(username: nickname, realname: "PandaPing").rawString)
             startProcessing()
         } catch {
             state = .error(error.localizedDescription)
+            IRCLogger.event("Connection failed: \(error.localizedDescription)", server: serverConfig.hostname)
         }
     }
 
     func disconnect() {
+        isIntentionalDisconnect = true
         processingTask?.cancel()
         processingTask = nil
         transport.disconnect()
         state = .disconnected
+        isAway = false
+        IRCLogger.event("Disconnected", server: serverConfig.hostname)
+    }
+
+    func gracefulDisconnect(message: String? = nil) async {
+        let quitMsg = message?.isEmpty == false ? message : nil
+        await send(.quit(message: quitMsg))
+        disconnect()
     }
 
     func send(_ command: IRCCommand) async {
-        try? await transport.sendLine(command.rawString)
+        let raw = command.rawString
+        IRCLogger.outgoing(raw, server: serverConfig.hostname)
+        try? await transport.sendLine(raw)
     }
 
     /// Sorted list of joined channels for UI display.
@@ -182,8 +217,10 @@ class IRCConnection: Identifiable {
             await send(.kick(channel: channel, nickname: nick, reason: reason))
 
         case .quit(let message):
-            await send(.quit(message: message))
-            disconnect()
+            await gracefulDisconnect(message: message)
+
+        case .away(let message):
+            await send(.away(message: message))
 
         case .pluginCommand(let command, let args, let target):
             try? pluginManager?.executeCommand(command, args: args, target: target, delegate: self)
@@ -196,11 +233,54 @@ class IRCConnection: Identifiable {
     // MARK: - Line Processing (internal for testability)
 
     func processLine(_ line: String) async {
+        IRCLogger.incoming(line, server: serverConfig.hostname)
         let message = IRCParser.parse(line)
         await handleMessage(message)
     }
 
     // MARK: - Private
+
+    private func handleCAP(_ message: IRCMessage) async {
+        // CAP params: [<nick-or-*>, <subcommand>, ...]
+        guard message.parameters.count >= 2 else { return }
+        let subcommand = message.parameters[1]
+
+        switch subcommand {
+        case "LS":
+            let capabilities = message.parameters.last ?? ""
+            if capabilities.contains("sasl") {
+                try? await transport.sendLine(IRCCommand.cap(subcommand: "REQ", parameters: "sasl").rawString)
+            } else {
+                awaitingSASL = false
+                try? await transport.sendLine(IRCCommand.cap(subcommand: "END").rawString)
+            }
+
+        case "ACK":
+            let acknowledged = message.parameters.last ?? ""
+            if acknowledged.contains("sasl") {
+                try? await transport.sendLine(IRCCommand.authenticate("PLAIN").rawString)
+            }
+
+        case "NAK":
+            awaitingSASL = false
+            try? await transport.sendLine(IRCCommand.cap(subcommand: "END").rawString)
+
+        default:
+            break
+        }
+    }
+
+    private func handleAuthenticate(_ message: IRCMessage) async {
+        guard message.parameters.first == "+" else { return }
+
+        let username = serverConfig.saslUsername ?? serverConfig.nickname
+        let password = serverConfig.saslPassword ?? ""
+
+        // SASL PLAIN: base64("\0<username>\0<password>")
+        let payload = "\0\(username)\0\(password)"
+        let encoded = Data(payload.utf8).base64EncodedString()
+        try? await transport.sendLine(IRCCommand.authenticate(encoded).rawString)
+    }
 
     private func startProcessing() {
         processingTask = Task { [weak self, transport] in
@@ -208,10 +288,68 @@ class IRCConnection: Identifiable {
                 guard !Task.isCancelled else { break }
                 await self?.processLine(line)
             }
-            if let self, self.state != .disconnected {
+            guard let self else { return }
+            if !self.isIntentionalDisconnect && !Task.isCancelled {
+                IRCLogger.event("Connection lost unexpectedly", server: self.serverConfig.hostname)
+                await self.attemptReconnect()
+            } else if self.state != .disconnected {
                 self.state = .disconnected
             }
         }
+    }
+
+    private func attemptReconnect() async {
+        let channelNames = Array(joinedChannels.keys)
+        channelsToRejoin = channelNames
+
+        for attempt in 1...Self.maxReconnectAttempts {
+            guard !Task.isCancelled, !isIntentionalDisconnect else { return }
+
+            state = .reconnecting(attempt: attempt)
+            IRCLogger.event(
+                "Reconnection attempt \(attempt)/\(Self.maxReconnectAttempts)",
+                server: serverConfig.hostname
+            )
+
+            let delay = min(Self.baseReconnectDelay * pow(2, Double(attempt - 1)), 30)
+            do {
+                try await Task.sleep(for: .seconds(delay))
+            } catch {
+                return
+            }
+
+            guard !Task.isCancelled, !isIntentionalDisconnect else { return }
+
+            do {
+                try await transport.connect()
+                awaitingSASL = false
+
+                if let pass = serverConfig.serverPassword, !pass.isEmpty {
+                    try await transport.sendLine(IRCCommand.pass(pass).rawString)
+                }
+
+                if serverConfig.authMethod == .sasl {
+                    awaitingSASL = true
+                    try await transport.sendLine(IRCCommand.cap(subcommand: "LS", parameters: "302").rawString)
+                }
+
+                try await transport.sendLine(IRCCommand.nick(nickname).rawString)
+                try await transport.sendLine(IRCCommand.user(username: nickname, realname: "PandaPing").rawString)
+
+                startProcessing()
+                IRCLogger.event("Reconnected successfully", server: serverConfig.hostname)
+                return
+            } catch {
+                IRCLogger.event(
+                    "Reconnection attempt \(attempt) failed: \(error.localizedDescription)",
+                    server: serverConfig.hostname
+                )
+                continue
+            }
+        }
+
+        state = .error("Reconnection failed after \(Self.maxReconnectAttempts) attempts")
+        channelsToRejoin = nil
     }
 
     private func handleMessage(_ message: IRCMessage) async {
@@ -221,10 +359,37 @@ class IRCConnection: Identifiable {
             let server = message.parameters.first ?? ""
             try? await transport.sendLine(IRCCommand.pong(server: server).rawString)
 
+        case "CAP":
+            await handleCAP(message)
+
+        case "AUTHENTICATE":
+            await handleAuthenticate(message)
+
+        // SASL success
+        case "900", "903":
+            awaitingSASL = false
+            serverMessages.append(message)
+            try? await transport.sendLine(IRCCommand.cap(subcommand: "END").rawString)
+
+        // SASL failure
+        case "902", "904", "905", "906":
+            awaitingSASL = false
+            serverMessages.append(message)
+            try? await transport.sendLine(IRCCommand.cap(subcommand: "END").rawString)
+
         case "001":
             state = .connected
             serverMessages.append(message)
-            for channel in serverConfig.channels {
+
+            if serverConfig.authMethod == .nickserv,
+               let pass = serverConfig.nickservPassword, !pass.isEmpty {
+                let identifyMessage = "IDENTIFY \(pass)"
+                try? await transport.sendLine(IRCCommand.privmsg(target: "NickServ", message: identifyMessage).rawString)
+            }
+
+            let channels = channelsToRejoin ?? serverConfig.channels
+            channelsToRejoin = nil
+            for channel in channels {
                 try? await transport.sendLine(IRCCommand.join(channel: channel).rawString)
             }
 
@@ -232,7 +397,11 @@ class IRCConnection: Identifiable {
             guard let channel = message.parameters.first else { break }
             let sender = message.senderUser
             if sender?.nickname == nickname {
-                joinedChannels[channel] = IRCChannel(name: channel)
+                if joinedChannels[channel] == nil {
+                    joinedChannels[channel] = IRCChannel(name: channel)
+                } else {
+                    joinedChannels[channel]?.users.removeAll()
+                }
             } else if let senderNick = sender?.nickname {
                 joinedChannels[channel]?.users.append(ChannelUser(nickname: senderNick))
             }
@@ -334,6 +503,32 @@ class IRCConnection: Identifiable {
                         joinedChannels[channel]?.users[idx].modePrefix = nil
                     }
                 }
+            }
+
+        case "305":
+            // RPL_UNAWAY — we are no longer marked as away
+            isAway = false
+            serverMessages.append(message)
+
+        case "306":
+            // RPL_NOWAWAY — we are now marked as away
+            isAway = true
+            serverMessages.append(message)
+
+        case "301":
+            // RPL_AWAY — target user is away; show in PM chat if open
+            if message.parameters.count >= 3 {
+                let awayNick = message.parameters[1]
+                let awayText = message.parameters.last ?? ""
+                if privateChats[awayNick] != nil {
+                    var notice = message
+                    notice.channel = privateChats[awayNick]
+                    privateChats[awayNick]?.messages.append(notice)
+                } else {
+                    serverMessages.append(message)
+                }
+            } else {
+                serverMessages.append(message)
             }
 
         case "NICK":

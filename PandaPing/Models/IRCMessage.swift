@@ -22,6 +22,9 @@ struct IRCMessage {
     /// The original raw IRC line
     let raw: String
 
+    /// When the message was received (or created for local echoes).
+    let receivedAt: Date = Date()
+
     /// True when the message is a CTCP ACTION (/me). The action text is stored
     /// in `parameters` with the CTCP markers stripped.
     var isAction: Bool = false
