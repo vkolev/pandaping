@@ -353,9 +353,13 @@ class IRCConnection: Identifiable {
     }
 
     private func handleMessage(_ message: IRCMessage) async {
+        let isNumeric = message.command.count == 3 && message.command.allSatisfy(\.isNumber)
+        if isNumeric {
+            serverMessages.append(message)
+        }
+
         switch message.command {
         case "PING":
-            // Auto-respond, don't log
             let server = message.parameters.first ?? ""
             try? await transport.sendLine(IRCCommand.pong(server: server).rawString)
 
@@ -368,18 +372,15 @@ class IRCConnection: Identifiable {
         // SASL success
         case "900", "903":
             awaitingSASL = false
-            serverMessages.append(message)
             try? await transport.sendLine(IRCCommand.cap(subcommand: "END").rawString)
 
         // SASL failure
         case "902", "904", "905", "906":
             awaitingSASL = false
-            serverMessages.append(message)
             try? await transport.sendLine(IRCCommand.cap(subcommand: "END").rawString)
 
         case "001":
             state = .connected
-            serverMessages.append(message)
 
             if serverConfig.authMethod == .nickserv,
                let pass = serverConfig.nickservPassword, !pass.isEmpty {
@@ -508,27 +509,20 @@ class IRCConnection: Identifiable {
         case "305":
             // RPL_UNAWAY — we are no longer marked as away
             isAway = false
-            serverMessages.append(message)
 
         case "306":
             // RPL_NOWAWAY — we are now marked as away
             isAway = true
-            serverMessages.append(message)
 
         case "301":
-            // RPL_AWAY — target user is away; show in PM chat if open
+            // RPL_AWAY — target user is away; also show in PM chat if open
             if message.parameters.count >= 3 {
                 let awayNick = message.parameters[1]
-                let awayText = message.parameters.last ?? ""
                 if privateChats[awayNick] != nil {
                     var notice = message
                     notice.channel = privateChats[awayNick]
                     privateChats[awayNick]?.messages.append(notice)
-                } else {
-                    serverMessages.append(message)
                 }
-            } else {
-                serverMessages.append(message)
             }
 
         case "NICK":
@@ -547,8 +541,9 @@ class IRCConnection: Identifiable {
             }
 
         default:
-            // All other messages (NOTICE, numeric replies, MOTD, errors) → server log
-            serverMessages.append(message)
+            if !isNumeric {
+                serverMessages.append(message)
+            }
         }
     }
 }
