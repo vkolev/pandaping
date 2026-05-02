@@ -74,6 +74,11 @@ struct ClassicMessageView: View {
                         .padding(.horizontal, 12)
                         .padding(.vertical, 8)
                     }
+                    .onAppear {
+                        if !messages.isEmpty {
+                            proxy.scrollTo(messages.count - 1, anchor: .bottom)
+                        }
+                    }
                     .onChange(of: messages.count) { _, newCount in
                         if newCount > 0 {
                             proxy.scrollTo(newCount - 1, anchor: .bottom)
@@ -175,7 +180,14 @@ private struct ClassicMessageRow: View {
         message.senderUser?.nickname
     }
 
+    private var isNumericReply: Bool {
+        message.command.count == 3 && message.command.allSatisfy(\.isNumber)
+    }
+
     private var messageText: String {
+        if isNumericReply && message.parameters.count > 1 {
+            return message.parameters.dropFirst().joined(separator: " ")
+        }
         if message.parameters.count >= 2 {
             return message.parameters.last ?? ""
         }

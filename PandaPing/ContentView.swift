@@ -17,6 +17,7 @@ struct ContentView: View {
             if let selection = serverManager.selection,
                let connection = serverManager.selectedConnection {
                 detailView(for: selection, connection: connection)
+                    .id(selection)
             } else {
                 ContentUnavailableView(
                     "No Channel Selected",
