@@ -33,6 +33,31 @@ enum AppAppearance: String, CaseIterable, Identifiable, Codable {
     }
 }
 
+enum AppLanguage: String, CaseIterable, Identifiable {
+    case system
+    case en
+    case de
+    case bg
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .system: return String(localized: "System")
+        case .en: return "English"
+        case .de: return "Deutsch"
+        case .bg: return "Български"
+        }
+    }
+
+    var locale: Locale? {
+        switch self {
+        case .system: return nil
+        default: return Locale(identifier: rawValue)
+        }
+    }
+}
+
 enum MessageFont: String, CaseIterable, Identifiable {
     case sfMono = "SF Mono"
     case menlo = "Menlo"
@@ -58,6 +83,7 @@ class AppSettings {
     var messageFontName: String = MessageFont.sfMono.rawValue
     var messageFontSize: Double = 13
     var messageLineSpacing: Double = 2
+    var language: AppLanguage = .system
     var ircLoggingEnabled: Bool = false
     var quitMessage: String = "PandaPing IRC Client for macOS"
     var savedServers: [SavedServer] = []
@@ -106,6 +132,7 @@ class AppSettings {
         defaults.set(messageFontName, forKey: "pp_messageFontName")
         defaults.set(messageFontSize, forKey: "pp_messageFontSize")
         defaults.set(messageLineSpacing, forKey: "pp_messageLineSpacing")
+        defaults.set(language.rawValue, forKey: "pp_language")
         defaults.set(ircLoggingEnabled, forKey: "pp_ircLoggingEnabled")
         defaults.set(quitMessage, forKey: "pp_quitMessage")
 
@@ -129,6 +156,10 @@ class AppSettings {
             messageLineSpacing = defaults.double(forKey: "pp_messageLineSpacing")
         }
 
+        if let raw = defaults.string(forKey: "pp_language"),
+           let value = AppLanguage(rawValue: raw) {
+            language = value
+        }
         ircLoggingEnabled = defaults.bool(forKey: "pp_ircLoggingEnabled")
 
         if let raw = defaults.string(forKey: "pp_quitMessage") {
