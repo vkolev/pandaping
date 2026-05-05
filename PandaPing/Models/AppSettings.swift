@@ -84,6 +84,9 @@ class AppSettings {
     // MARK: - Server Management
 
     func addSavedServer(_ config: IRCServer, connectOnStartup: Bool = false) {
+        guard !savedServers.contains(where: {
+            $0.config.hostname == config.hostname && $0.config.port == config.port
+        }) else { return }
         savedServers.append(SavedServer(config: config, connectOnStartup: connectOnStartup))
         save()
     }

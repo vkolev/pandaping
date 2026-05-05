@@ -111,6 +111,7 @@ struct ChannelListView: View {
         .sheet(isPresented: $showingAddServer) {
             AddServerView { server in
                 manager.addAndConnect(server)
+                appSettings.addSavedServer(server)
             }
         }
         .sheet(isPresented: $showingJoinChannel) {
