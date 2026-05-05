@@ -84,7 +84,7 @@ struct ContentView: View {
                             showUserList.toggle()
                         }
                     } label: {
-                        Image(systemName: showUserList ? "person.2.fill" : "person.2.slash")
+                        Image(systemName: "sidebar.right")
                     }
                     .help(showUserList ? "Hide User List" : "Show User List")
                 }
