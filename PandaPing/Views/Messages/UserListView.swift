@@ -52,7 +52,7 @@ struct UserListView: View {
                 .padding(.vertical, 4)
             }
         }
-        .frame(width: 180)
+        .frame(maxWidth: .infinity)
     }
 
     private var sortedUsers: [ChannelUser] {

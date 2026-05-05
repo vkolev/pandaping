@@ -25,6 +25,9 @@ struct PandaPingApp: App {
                     autoConnectSavedServers()
                 }
         }
+        .commands {
+            InspectorCommands()
+        }
 
         #if os(macOS)
         Settings {

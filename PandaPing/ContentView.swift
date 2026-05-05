@@ -9,6 +9,7 @@ import SwiftUI
 
 struct ContentView: View {
     @Bindable var serverManager: ServerManager
+    @State private var showUserList = true
 
     var body: some View {
         NavigationSplitView {
@@ -35,23 +36,22 @@ struct ContentView: View {
         switch selection {
         case .channel(_, let name):
             let channel = connection.joinedChannels[name]
-            HStack(spacing: 0) {
-                ClassicMessageView(
-                    messages: channel?.messages ?? [],
-                    title: name,
-                    subtitle: "Connected to \(connection.serverConfig.hostname)",
-                    currentTarget: name,
-                    onAction: { action in
-                        Task { await connection.executeAction(action) }
-                    },
-                    onNicknameClicked: { nick in
-                        openPrivateChat(nick, serverIndex: serverIndex, connection: connection)
-                    },
-                    nicknames: (channel?.users ?? []).map(\.nickname),
-                    channelNames: Array(connection.joinedChannels.keys),
-                    topic: channel?.topic
-                )
-                Divider()
+            ClassicMessageView(
+                messages: channel?.messages ?? [],
+                title: name,
+                subtitle: "Connected to \(connection.serverConfig.hostname)",
+                currentTarget: name,
+                onAction: { action in
+                    Task { await connection.executeAction(action) }
+                },
+                onNicknameClicked: { nick in
+                    openPrivateChat(nick, serverIndex: serverIndex, connection: connection)
+                },
+                nicknames: (channel?.users ?? []).map(\.nickname),
+                channelNames: Array(connection.joinedChannels.keys),
+                topic: channel?.topic
+            )
+            .inspector(isPresented: $showUserList) {
                 UserListView(
                     users: channel?.users ?? [],
                     currentUserIsOp: channel?.users.first { $0.nickname == connection.nickname
@@ -75,6 +75,19 @@ struct ContentView: View {
                         }
                     }
                 )
+                .inspectorColumnWidth(min: 150, ideal: 180, max: 300)
+            }
+            .toolbar {
+                ToolbarItem(placement: .automatic) {
+                    Button {
+                        withAnimation {
+                            showUserList.toggle()
+                        }
+                    } label: {
+                        Image(systemName: showUserList ? "person.2.fill" : "person.2.slash")
+                    }
+                    .help(showUserList ? "Hide User List" : "Show User List")
+                }
             }
 
         case .privateMessage(_, let nickname):
