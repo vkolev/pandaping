@@ -18,6 +18,7 @@ struct PandaPingApp: App {
             ContentView(serverManager: serverManager)
                 .environment(appSettings)
                 .preferredColorScheme(appSettings.appearance.colorScheme)
+                .environment(\.locale, appSettings.language.locale ?? .current)
                 .onAppear {
                     serverManager.pluginManager = pluginManager
                     pluginManager.scanAndLoad()
@@ -34,6 +35,7 @@ struct PandaPingApp: App {
                 }
             )
             .environment(appSettings)
+            .environment(\.locale, appSettings.language.locale ?? .current)
         }
         #endif
     }

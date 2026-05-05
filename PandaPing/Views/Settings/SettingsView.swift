@@ -75,6 +75,17 @@ struct AppearanceSettingsView: View {
                 }
             }
 
+            Section("Language") {
+                Picker("Language", selection: $settings.language) {
+                    ForEach(AppLanguage.allCases) { lang in
+                        Text(lang.displayName).tag(lang)
+                    }
+                }
+                .onChange(of: settings.language) {
+                    appSettings.save()
+                }
+            }
+
             Section("Messages") {
                 Picker("Font", selection: $settings.messageFontName) {
                     ForEach(MessageFont.allCases) { font in
