@@ -13,6 +13,7 @@ struct ContentView: View {
     var body: some View {
         NavigationSplitView {
             ChannelListView(manager: serverManager)
+                .navigationSplitViewColumnWidth(min: 200, ideal: 200, max: 400)
         } detail: {
             if let selection = serverManager.selection,
                let connection = serverManager.selectedConnection {
