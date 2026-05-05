@@ -5,6 +5,7 @@
 //  Created by Vladimir Kolev on 22.04.26.
 //
 
+import AppKit
 import SwiftUI
 
 /// Displays IRC messages in a classic text-based style:
@@ -60,31 +61,23 @@ struct ClassicMessageView: View {
                     .foregroundStyle(.tertiary)
                 Spacer()
             } else {
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        LazyVStack(alignment: .leading, spacing: appSettings.messageLineSpacing) {
-                            ForEach(Array(messages.enumerated()), id: \.offset) { index, message in
-                                ClassicMessageRow(
-                                    message: message,
-                                    onNicknameClicked: onNicknameClicked
-                                )
-                                .id(index)
-                            }
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 8)
-                    }
-                    .onAppear {
-                        if !messages.isEmpty {
-                            proxy.scrollTo(messages.count - 1, anchor: .bottom)
+                SelectableMessageTextView(
+                    messages: messages,
+                    fontName: appSettings.messageFontName,
+                    fontSize: appSettings.messageFontSize,
+                    lineSpacing: appSettings.messageLineSpacing,
+                    onLinkClicked: { url in
+                        guard let name = url.pathComponents.last else { return }
+                        switch url.host {
+                        case "channel":
+                            onAction?(.join(channel: "#\(name)"))
+                        case "mention":
+                            onNicknameClicked?(name)
+                        default:
+                            break
                         }
                     }
-                    .onChange(of: messages.count) { _, newCount in
-                        if newCount > 0 {
-                            proxy.scrollTo(newCount - 1, anchor: .bottom)
-                        }
-                    }
-                }
+                )
             }
 
             // Input field (not shown for server console)
@@ -119,52 +112,74 @@ struct ClassicMessageView: View {
     }
 }
 
-// MARK: - Message Row
+// MARK: - NSTextView Wrapper
 
-private struct ClassicMessageRow: View {
-    let message: IRCMessage
-    var onNicknameClicked: ((String) -> Void)? = nil
+private struct SelectableMessageTextView: NSViewRepresentable {
+    let messages: [IRCMessage]
+    let fontName: String
+    let fontSize: Double
+    let lineSpacing: Double
+    var onLinkClicked: ((URL) -> Void)? = nil
 
-    var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 0) {
-            // Timestamp
-            Text(timestamp)
-                .foregroundStyle(.secondary)
+    func makeCoordinator() -> Coordinator {
+        Coordinator(onLinkClicked: onLinkClicked)
+    }
 
-            if message.isAction {
-                // Action format: [HH:mm:ss] nick action text (all italic)
-                if let sender = senderText {
-                    Text(" ")
-                    nickButton(sender)
-                        .italic()
-                    Text(" ")
-                }
-                messageBody
-                    .italic()
-            } else {
-                // Normal format: [HH:mm:ss] <nick> message text
-                if let sender = senderText {
-                    Text(" <")
-                        .foregroundStyle(.secondary)
-                    nickButton(sender)
-                    Text("> ")
-                        .foregroundStyle(.secondary)
-                } else {
-                    Text(" ")
-                }
-                messageBody
-            }
+    func makeNSView(context: Context) -> NSScrollView {
+        let scrollView = NSTextView.scrollableTextView()
+        let textView = scrollView.documentView as! NSTextView
+        textView.isEditable = false
+        textView.isSelectable = true
+        textView.backgroundColor = .clear
+        textView.drawsBackground = false
+        textView.isAutomaticLinkDetectionEnabled = false
+        textView.linkTextAttributes = [.cursor: NSCursor.pointingHand]
+        textView.textContainerInset = NSSize(width: 8, height: 8)
+        textView.isHorizontallyResizable = false
+        textView.textContainer?.widthTracksTextView = true
+        textView.textContainer?.containerSize = NSSize(
+            width: 0,
+            height: CGFloat.greatestFiniteMagnitude
+        )
+        textView.delegate = context.coordinator
+        return scrollView
+    }
+
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        guard let textView = scrollView.documentView as? NSTextView else { return }
+        context.coordinator.onLinkClicked = onLinkClicked
+
+        let newString = buildFullAttributedString()
+        textView.textStorage?.setAttributedString(newString)
+        textView.scrollToEndOfDocument(nil)
+    }
+
+    // MARK: - Font
+
+    private var nsFont: NSFont {
+        switch MessageFont(rawValue: fontName) {
+        case .sfMono, .none:
+            return .monospacedSystemFont(ofSize: fontSize, weight: .regular)
+        case .menlo:
+            return NSFont(name: "Menlo", size: fontSize)
+                ?? .monospacedSystemFont(ofSize: fontSize, weight: .regular)
+        case .courier:
+            return NSFont(name: "Courier New", size: fontSize)
+                ?? .monospacedSystemFont(ofSize: fontSize, weight: .regular)
+        case .system:
+            return .systemFont(ofSize: fontSize)
         }
     }
 
-    private func nickButton(_ nick: String) -> some View {
-        Text(nick)
-            .foregroundStyle(NicknameColor.color(for: nick))
-            .fontWeight(.medium)
-            .onTapGesture {
-                onNicknameClicked?(nick)
-            }
+    private func fontWithTraits(_ font: NSFont, bold: Bool, italic: Bool) -> NSFont {
+        var traits = font.fontDescriptor.symbolicTraits
+        if bold { traits.insert(.bold) }
+        if italic { traits.insert(.italic) }
+        let descriptor = font.fontDescriptor.withSymbolicTraits(traits)
+        return NSFont(descriptor: descriptor, size: font.pointSize) ?? font
     }
+
+    // MARK: - Attributed String Builder
 
     private static let timeFormatter: DateFormatter = {
         let formatter = DateFormatter()
@@ -172,19 +187,140 @@ private struct ClassicMessageRow: View {
         return formatter
     }()
 
-    private var timestamp: String {
-        Self.timeFormatter.string(from: message.receivedAt)
+    private func buildFullAttributedString() -> NSAttributedString {
+        let result = NSMutableAttributedString()
+        let font = nsFont
+
+        for (index, message) in messages.enumerated() {
+            if index > 0 {
+                result.append(NSAttributedString(string: "\n"))
+            }
+            result.append(buildMessageRow(message, font: font))
+        }
+
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.paragraphSpacing = lineSpacing
+        result.addAttribute(
+            .paragraphStyle,
+            value: paragraphStyle,
+            range: NSRange(location: 0, length: result.length)
+        )
+
+        return result
     }
 
-    private var senderText: String? {
-        message.senderUser?.nickname
+    private func buildMessageRow(_ message: IRCMessage, font: NSFont) -> NSAttributedString {
+        let result = NSMutableAttributedString()
+        let secondary = NSColor.secondaryLabelColor
+
+        let timestamp = Self.timeFormatter.string(from: message.receivedAt)
+        result.append(NSAttributedString(string: timestamp, attributes: [
+            .foregroundColor: secondary,
+            .font: font
+        ]))
+
+        let sender = message.senderUser?.nickname
+
+        if message.isAction {
+            if let sender {
+                result.append(NSAttributedString(string: " ", attributes: [.font: font]))
+                result.append(nickAttributedString(sender, font: font, italic: true))
+                result.append(NSAttributedString(string: " ", attributes: [.font: font]))
+            }
+            result.append(buildMessageBody(message, font: font, italic: true))
+        } else {
+            if let sender {
+                result.append(NSAttributedString(string: " <", attributes: [
+                    .foregroundColor: secondary, .font: font
+                ]))
+                result.append(nickAttributedString(sender, font: font, italic: false))
+                result.append(NSAttributedString(string: "> ", attributes: [
+                    .foregroundColor: secondary, .font: font
+                ]))
+            } else {
+                result.append(NSAttributedString(string: " ", attributes: [.font: font]))
+            }
+            result.append(buildMessageBody(message, font: font, italic: false))
+        }
+
+        return result
     }
 
-    private var isNumericReply: Bool {
-        message.command.count == 3 && message.command.allSatisfy(\.isNumber)
+    private func nickAttributedString(_ nick: String, font: NSFont, italic: Bool) -> NSAttributedString {
+        var attrs: [NSAttributedString.Key: Any] = [
+            .foregroundColor: NSColor(NicknameColor.color(for: nick)),
+            .font: fontWithTraits(font, bold: true, italic: italic)
+        ]
+        if let encoded = nick.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed),
+           let url = URL(string: "pandaping://mention/\(encoded)") {
+            attrs[.link] = url
+        }
+        return NSAttributedString(string: nick, attributes: attrs)
     }
 
-    private var messageText: String {
+    private func buildMessageBody(
+        _ message: IRCMessage,
+        font: NSFont,
+        italic: Bool
+    ) -> NSAttributedString {
+        let text = Self.messageText(for: message)
+        let segments = MessageTextParser.parse(text)
+        let result = NSMutableAttributedString()
+
+        for segment in segments {
+            var attrs: [NSAttributedString.Key: Any] = [
+                .font: fontWithTraits(
+                    font,
+                    bold: segment.bold,
+                    italic: segment.italic || italic
+                ),
+                .foregroundColor: NSColor.labelColor
+            ]
+
+            if segment.underline {
+                attrs[.underlineStyle] = NSUnderlineStyle.single.rawValue
+            }
+            if let fg = segment.foregroundColor {
+                attrs[.foregroundColor] = NSColor(MessageTextParser.mircColor(fg))
+            }
+            if let bg = segment.backgroundColor {
+                attrs[.backgroundColor] = NSColor(MessageTextParser.mircColor(bg))
+            }
+
+            switch segment.kind {
+            case .channel:
+                if segment.foregroundColor == nil {
+                    attrs[.foregroundColor] = NSColor(Color.cyan)
+                }
+                let name = String(segment.text.dropFirst())
+                if let url = URL(string: "pandaping://channel/\(name)") {
+                    attrs[.link] = url
+                }
+            case .mention:
+                if segment.foregroundColor == nil {
+                    attrs[.foregroundColor] = NSColor(Color.orange)
+                }
+                let name = String(segment.text.dropFirst())
+                if let url = URL(string: "pandaping://mention/\(name)") {
+                    attrs[.link] = url
+                }
+            case .link(let url):
+                attrs[.link] = url
+                attrs[.foregroundColor] = NSColor.linkColor
+                attrs[.underlineStyle] = NSUnderlineStyle.single.rawValue
+            case .plain:
+                break
+            }
+
+            result.append(NSAttributedString(string: segment.text, attributes: attrs))
+        }
+
+        return result
+    }
+
+    private static func messageText(for message: IRCMessage) -> String {
+        let isNumericReply = message.command.count == 3
+            && message.command.allSatisfy(\.isNumber)
         if isNumericReply && message.parameters.count > 1 {
             return message.parameters.dropFirst().joined(separator: " ")
         }
@@ -194,8 +330,23 @@ private struct ClassicMessageRow: View {
         return message.parameters.joined(separator: " ")
     }
 
-    private var messageBody: Text {
-        let attributed = MessageTextParser.styledAttributedString(for: messageText)
-        return Text(attributed)
+    // MARK: - Coordinator
+
+    class Coordinator: NSObject, NSTextViewDelegate {
+        var onLinkClicked: ((URL) -> Void)?
+
+        init(onLinkClicked: ((URL) -> Void)?) {
+            self.onLinkClicked = onLinkClicked
+        }
+
+        func textView(_ textView: NSTextView, clickedOnLink link: Any, at charIndex: Int) -> Bool {
+            guard let url = link as? URL else { return false }
+            if url.scheme == "pandaping" {
+                onLinkClicked?(url)
+                return true
+            }
+            NSWorkspace.shared.open(url)
+            return true
+        }
     }
 }
