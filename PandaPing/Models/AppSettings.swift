@@ -96,6 +96,13 @@ class AppSettings {
         save()
     }
 
+    func updateSavedServer(id: UUID, config: IRCServer, connectOnStartup: Bool) {
+        guard let index = savedServers.firstIndex(where: { $0.id == id }) else { return }
+        savedServers[index].config = config
+        savedServers[index].connectOnStartup = connectOnStartup
+        save()
+    }
+
     func toggleStartup(for id: UUID) {
         guard let index = savedServers.firstIndex(where: { $0.id == id }) else { return }
         savedServers[index].connectOnStartup.toggle()

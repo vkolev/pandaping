@@ -7,24 +7,55 @@
 
 import SwiftUI
 
-/// A form for entering IRC server connection details.
+/// A form for entering or editing IRC server connection details.
 struct AddServerView: View {
     @Environment(\.dismiss) private var dismiss
 
     var confirmTitle: String = "Connect"
-    var onConnect: (IRCServer) -> Void
+    var onConnect: ((IRCServer) -> Void)?
+    var onSave: ((IRCServer, Bool) -> Void)?
+
+    private let editingServer: SavedServer?
 
     @State private var hostname = ""
     @State private var port = "6667"
     @State private var nickname = ""
     @State private var useSSL = false
     @State private var channelsText = ""
+    @State private var connectOnStartup = false
 
     @State private var authMethod: AuthMethod = .none
     @State private var serverPassword = ""
     @State private var saslUsername = ""
     @State private var saslPassword = ""
     @State private var nickservPassword = ""
+
+    private var isEditing: Bool { editingServer != nil }
+
+    init(confirmTitle: String = "Connect", onConnect: @escaping (IRCServer) -> Void) {
+        self.confirmTitle = confirmTitle
+        self.onConnect = onConnect
+        self.onSave = nil
+        self.editingServer = nil
+    }
+
+    init(server: SavedServer, onSave: @escaping (IRCServer, Bool) -> Void) {
+        self.confirmTitle = "Save"
+        self.onConnect = nil
+        self.onSave = onSave
+        self.editingServer = server
+        _hostname = State(initialValue: server.config.hostname)
+        _port = State(initialValue: String(server.config.port))
+        _nickname = State(initialValue: server.config.nickname)
+        _useSSL = State(initialValue: server.config.useSSL)
+        _channelsText = State(initialValue: server.config.channels.joined(separator: ", "))
+        _connectOnStartup = State(initialValue: server.connectOnStartup)
+        _authMethod = State(initialValue: server.config.authMethod)
+        _serverPassword = State(initialValue: server.config.serverPassword ?? "")
+        _saslUsername = State(initialValue: server.config.saslUsername ?? "")
+        _saslPassword = State(initialValue: server.config.saslPassword ?? "")
+        _nickservPassword = State(initialValue: server.config.nickservPassword ?? "")
+    }
 
     var body: some View {
         NavigationStack {
@@ -95,9 +126,16 @@ struct AddServerView: View {
                     Text("e.g. #swift, #general")
                         .font(.caption)
                 }
+
+                Section {
+                    Toggle("Connect on Startup", isOn: $connectOnStartup)
+                } footer: {
+                    Text("Automatically connect to this server when PandaPing launches.")
+                        .font(.caption)
+                }
             }
-            .padding()
-            .navigationTitle("Add Server")
+            .formStyle(.grouped)
+            .navigationTitle(isEditing ? "Edit Server" : "Add Server")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -109,14 +147,14 @@ struct AddServerView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(confirmTitle) {
-                        connect()
+                        confirm()
                     }
                     .disabled(!isValid)
                 }
             }
         }
         #if os(macOS)
-        .frame(minWidth: 350, minHeight: 300)
+        .frame(minWidth: 400, minHeight: 450)
         #endif
     }
 
@@ -126,7 +164,7 @@ struct AddServerView: View {
         Int(port) != nil
     }
 
-    private func connect() {
+    private func buildServer() -> IRCServer {
         let channels = channelsText
             .split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespaces) }
@@ -150,7 +188,16 @@ struct AddServerView: View {
             server.nickservPassword = nickservPassword.isEmpty ? nil : nickservPassword
         }
 
-        onConnect(server)
+        return server
+    }
+
+    private func confirm() {
+        let server = buildServer()
+        if let onSave {
+            onSave(server, connectOnStartup)
+        } else {
+            onConnect?(server)
+        }
         dismiss()
     }
 }

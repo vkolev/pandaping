@@ -120,6 +120,7 @@ struct ServerSettingsView: View {
     var onConnect: ((IRCServer) -> Void)?
 
     @State private var showingAddServer = false
+    @State private var editingServer: SavedServer?
 
     var body: some View {
         Form {
@@ -130,11 +131,6 @@ struct ServerSettingsView: View {
                 } else {
                     ForEach(appSettings.savedServers) { server in
                         savedServerRow(server)
-                    }
-                    .onDelete { indexSet in
-                        for index in indexSet {
-                            appSettings.removeSavedServer(id: appSettings.savedServers[index].id)
-                        }
                     }
                 }
 
@@ -154,6 +150,11 @@ struct ServerSettingsView: View {
         .sheet(isPresented: $showingAddServer) {
             AddServerView(confirmTitle: "Save") { server in
                 appSettings.addSavedServer(server)
+            }
+        }
+        .sheet(item: $editingServer) { server in
+            AddServerView(server: server) { config, autoConnect in
+                appSettings.updateSavedServer(id: server.id, config: config, connectOnStartup: autoConnect)
             }
         }
     }
@@ -182,30 +183,22 @@ struct ServerSettingsView: View {
 
             Spacer()
 
+            Button("Edit") {
+                editingServer = server
+            }
+            .buttonStyle(.bordered)
+
+            Button("Delete") {
+                appSettings.removeSavedServer(id: server.id)
+            }
+            .buttonStyle(.bordered)
+            .foregroundStyle(.red)
+
             if let onConnect {
                 Button("Connect") {
                     onConnect(server.config)
                 }
                 .buttonStyle(.bordered)
-            }
-        }
-        .contextMenu {
-            Button {
-                appSettings.toggleStartup(for: server.id)
-            } label: {
-                if server.connectOnStartup {
-                    Label("Disable Auto-Connect", systemImage: "bolt.slash")
-                } else {
-                    Label("Enable Auto-Connect", systemImage: "bolt.fill")
-                }
-            }
-
-            Divider()
-
-            Button(role: .destructive) {
-                appSettings.removeSavedServer(id: server.id)
-            } label: {
-                Label("Remove Server", systemImage: "trash")
             }
         }
     }
