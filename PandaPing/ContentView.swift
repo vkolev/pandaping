@@ -9,6 +9,7 @@ import SwiftUI
 
 struct ContentView: View {
     @Bindable var serverManager: ServerManager
+    @Environment(AppSettings.self) private var appSettings
     @State private var showUserList = true
 
     var body: some View {
@@ -36,10 +37,11 @@ struct ContentView: View {
         switch selection {
         case .channel(_, let name):
             let channel = connection.joinedChannels[name]
-            ClassicMessageView(
+            messageView(
                 messages: channel?.messages ?? [],
                 title: name,
                 subtitle: "Connected to \(connection.serverConfig.hostname)",
+                currentNickname: connection.nickname,
                 currentTarget: name,
                 onAction: { action in
                     Task { await connection.executeAction(action) }
@@ -91,10 +93,11 @@ struct ContentView: View {
             }
 
         case .privateMessage(_, let nickname):
-            ClassicMessageView(
+            messageView(
                 messages: connection.privateChats[nickname]?.messages ?? [],
                 title: nickname,
                 subtitle: "Private message on \(connection.serverConfig.hostname)",
+                currentNickname: connection.nickname,
                 currentTarget: nickname,
                 onAction: { action in
                     Task { await connection.executeAction(action) }
@@ -114,6 +117,48 @@ struct ContentView: View {
                     Task { await connection.executeAction(action) }
                 },
                 channelNames: Array(connection.joinedChannels.keys)
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func messageView(
+        messages: [IRCMessage],
+        title: String,
+        subtitle: String?,
+        currentNickname: String,
+        currentTarget: String? = nil,
+        onAction: ((UserAction) -> Void)? = nil,
+        onNicknameClicked: ((String) -> Void)? = nil,
+        nicknames: [String] = [],
+        channelNames: [String] = [],
+        topic: String? = nil
+    ) -> some View {
+        switch appSettings.messageViewStyle {
+        case .classic:
+            ClassicMessageView(
+                messages: messages,
+                title: title,
+                subtitle: subtitle,
+                currentTarget: currentTarget,
+                onAction: onAction,
+                onNicknameClicked: onNicknameClicked,
+                nicknames: nicknames,
+                channelNames: channelNames,
+                topic: topic
+            )
+        case .bubbles:
+            BubbleMessageView(
+                messages: messages,
+                title: title,
+                subtitle: subtitle,
+                currentNickname: currentNickname,
+                currentTarget: currentTarget,
+                onAction: onAction,
+                onNicknameClicked: onNicknameClicked,
+                nicknames: nicknames,
+                channelNames: channelNames,
+                topic: topic
             )
         }
     }

@@ -58,6 +58,13 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     }
 }
 
+enum MessageViewStyle: String, CaseIterable, Identifiable {
+    case classic = "Classic"
+    case bubbles = "Bubbles"
+
+    var id: String { rawValue }
+}
+
 enum MessageFont: String, CaseIterable, Identifiable {
     case sfMono = "SF Mono"
     case menlo = "Menlo"
@@ -80,6 +87,7 @@ struct SavedServer: Codable, Identifiable {
 @Observable
 class AppSettings {
     var appearance: AppAppearance = .system
+    var messageViewStyle: MessageViewStyle = .classic
     var messageFontName: String = MessageFont.sfMono.rawValue
     var messageFontSize: Double = 13
     var messageLineSpacing: Double = 2
@@ -139,6 +147,7 @@ class AppSettings {
 
     func save() {
         defaults.set(appearance.rawValue, forKey: "pp_appearance")
+        defaults.set(messageViewStyle.rawValue, forKey: "pp_messageViewStyle")
         defaults.set(messageFontName, forKey: "pp_messageFontName")
         defaults.set(messageFontSize, forKey: "pp_messageFontSize")
         defaults.set(messageLineSpacing, forKey: "pp_messageLineSpacing")
@@ -155,6 +164,10 @@ class AppSettings {
         if let raw = defaults.string(forKey: "pp_appearance"),
            let value = AppAppearance(rawValue: raw) {
             appearance = value
+        }
+        if let raw = defaults.string(forKey: "pp_messageViewStyle"),
+           let value = MessageViewStyle(rawValue: raw) {
+            messageViewStyle = value
         }
         if let raw = defaults.string(forKey: "pp_messageFontName") {
             messageFontName = raw

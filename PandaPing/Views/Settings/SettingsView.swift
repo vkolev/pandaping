@@ -87,6 +87,16 @@ struct AppearanceSettingsView: View {
             }
 
             Section("Messages") {
+                Picker("View Style", selection: $settings.messageViewStyle) {
+                    ForEach(MessageViewStyle.allCases) { style in
+                        Text(style.rawValue).tag(style)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: settings.messageViewStyle) {
+                    appSettings.save()
+                }
+
                 Picker("Font", selection: $settings.messageFontName) {
                     ForEach(MessageFont.allCases) { font in
                         Text(font.rawValue).tag(font.rawValue)
@@ -111,13 +121,56 @@ struct AppearanceSettingsView: View {
             }
 
             Section("Preview") {
-                VStack(alignment: .leading, spacing: settings.messageLineSpacing) {
-                    Text("[12:34:56] <alice> Hey everyone!")
-                    Text("[12:34:58] <bob> Hello alice, welcome back!")
-                    Text("[12:35:01] <alice> Thanks! What did I miss?")
+                if settings.messageViewStyle == .classic {
+                    VStack(alignment: .leading, spacing: settings.messageLineSpacing) {
+                        Text("[12:34:56] <alice> Hey everyone!")
+                        Text("[12:34:58] <bob> Hello alice, welcome back!")
+                        Text("[12:35:01] <alice> Thanks! What did I miss?")
+                    }
+                    .font(settings.messageFont)
+                    .padding(.vertical, 4)
+                } else {
+                    VStack(spacing: 4) {
+                        // Incoming bubble
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("alice")
+                                    .font(.caption)
+                                    .fontWeight(.semibold)
+                                    .foregroundStyle(NicknameColor.color(for: "alice"))
+                                    .padding(.leading, 8)
+                                Text("Hey everyone!")
+                                    .font(settings.messageFont)
+                                    .padding(.horizontal, 10)
+                                    .padding(.vertical, 6)
+                                    .background(Color.primary.opacity(0.08))
+                                    .clipShape(RoundedRectangle(cornerRadius: 14))
+                            }
+                            Spacer(minLength: 60)
+                        }
+                        // Own bubble
+                        HStack {
+                            Spacer(minLength: 60)
+                            Text("Hello alice, welcome back!")
+                                .font(settings.messageFont)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(Color.accentColor.opacity(0.25))
+                                .clipShape(RoundedRectangle(cornerRadius: 14))
+                        }
+                        // Incoming bubble
+                        HStack {
+                            Text("Thanks! What did I miss?")
+                                .font(settings.messageFont)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(Color.primary.opacity(0.08))
+                                .clipShape(RoundedRectangle(cornerRadius: 14))
+                            Spacer(minLength: 60)
+                        }
+                    }
+                    .padding(.vertical, 4)
                 }
-                .font(settings.messageFont)
-                .padding(.vertical, 4)
             }
         }
         .formStyle(.grouped)

@@ -222,6 +222,12 @@ class IRCConnection: Identifiable {
         case .away(let message):
             await send(.away(message: message))
 
+        case .topic(let channel, let text):
+            await send(.topic(channel: channel, text: text))
+
+        case .notice(let target, let text):
+            await send(.notice(target: target, message: text))
+
         case .pluginCommand(let command, let args, let target):
             try? pluginManager?.executeCommand(command, args: args, target: target, delegate: self)
 

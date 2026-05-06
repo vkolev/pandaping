@@ -20,6 +20,8 @@ enum UserAction: Equatable {
     case kickBan(channel: String, nickname: String, reason: String?)
     case quit(message: String?)
     case away(message: String?)
+    case topic(channel: String, text: String?)
+    case notice(target: String, text: String)
     case pluginCommand(command: String, args: String, target: String?)
     case serverCommand(raw: String)
 }
@@ -131,6 +133,26 @@ enum CommandRouter {
 
         case "back":
             return .away(message: nil)
+
+        case "notice":
+            guard let args else { return nil }
+            let argParts = args.split(separator: " ", maxSplits: 1)
+            guard argParts.count == 2 else { return nil }
+            return .notice(target: String(argParts[0]), text: String(argParts[1]))
+
+        case "topic":
+            if let args {
+                let argParts = args.split(separator: " ", maxSplits: 1)
+                let first = String(argParts[0])
+                if first.hasPrefix("#") || first.hasPrefix("&") {
+                    let text = argParts.count > 1 ? String(argParts[1]) : nil
+                    return .topic(channel: first, text: text)
+                }
+                guard let target = currentTarget else { return nil }
+                return .topic(channel: target, text: args)
+            }
+            guard let target = currentTarget else { return nil }
+            return .topic(channel: target, text: nil)
 
         default:
             if pluginCommands.contains(command) {

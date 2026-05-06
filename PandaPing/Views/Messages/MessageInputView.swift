@@ -19,6 +19,11 @@ struct MessageInputView: View {
     @State private var inputText = ""
     @FocusState private var isFocused: Bool
 
+    // Input history state
+    @State private var inputHistory: [String] = []
+    @State private var historyIndex: Int = -1
+    @State private var savedCurrentInput: String = ""
+
     // Tab completion state
     @State private var tabCycleIndex = 0
     @State private var tabOriginalText: String?
@@ -67,6 +72,14 @@ struct MessageInputView: View {
                     #if os(macOS)
                     .onKeyPress(.tab) {
                         performTabCompletion()
+                        return .handled
+                    }
+                    .onKeyPress(.upArrow) {
+                        navigateHistory(direction: .up)
+                        return .handled
+                    }
+                    .onKeyPress(.downArrow) {
+                        navigateHistory(direction: .down)
                         return .handled
                     }
                     .onKeyPress(phases: .down) { keyPress in
@@ -154,8 +167,43 @@ struct MessageInputView: View {
         guard let action = CommandRouter.parse(ircText, currentTarget: currentTarget) else {
             return
         }
+        let trimmed = inputText.trimmingCharacters(in: .whitespaces)
+        if !trimmed.isEmpty {
+            inputHistory.append(trimmed)
+        }
+        historyIndex = -1
+        savedCurrentInput = ""
         onAction(action)
         inputText = ""
+    }
+
+    private enum HistoryDirection { case up, down }
+
+    private func navigateHistory(direction: HistoryDirection) {
+        guard !inputHistory.isEmpty else { return }
+
+        switch direction {
+        case .up:
+            if historyIndex == -1 {
+                savedCurrentInput = inputText
+                historyIndex = inputHistory.count - 1
+            } else if historyIndex > 0 {
+                historyIndex -= 1
+            }
+            isTabCompleting = true
+            inputText = inputHistory[historyIndex]
+        case .down:
+            if historyIndex == -1 { return }
+            if historyIndex < inputHistory.count - 1 {
+                historyIndex += 1
+                isTabCompleting = true
+                inputText = inputHistory[historyIndex]
+            } else {
+                historyIndex = -1
+                isTabCompleting = true
+                inputText = savedCurrentInput
+            }
+        }
     }
 
     private func performTabCompletion() {

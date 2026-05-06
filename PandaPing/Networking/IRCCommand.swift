@@ -22,6 +22,8 @@ enum IRCCommand {
     case cap(subcommand: String, parameters: String? = nil)
     case authenticate(String)
     case away(message: String? = nil)
+    case topic(channel: String, text: String? = nil)
+    case notice(target: String, message: String)
     case raw(String)
 
     /// The raw IRC protocol string ready to send over the wire.
@@ -83,6 +85,15 @@ enum IRCCommand {
                 return "AWAY :\(message)"
             }
             return "AWAY"
+
+        case .topic(let channel, let text):
+            if let text {
+                return "TOPIC \(channel) :\(text)"
+            }
+            return "TOPIC \(channel)"
+
+        case .notice(let target, let message):
+            return "NOTICE \(target) :\(message)"
 
         case .raw(let line):
             return line
