@@ -24,6 +24,8 @@ to try and implement it as I want it. Of course AI was used to some extend.
 
 ![Settins Screen](Screens/settings_screen.png)
 
+![Bubble Chat View with Previews](Screens/bubble_view.png)
+
 **iPadOS**
 
 ![iPad Chat](Screens/ipad_screen.png)
@@ -38,8 +40,8 @@ For plugin documentation please check [Docs/PluginAPI.md](Docs/PluginAPI.md).
  - [ ] Polish authentication
  - [ ] Add themes for the chat and nickname list views 
  - [ ] More to come eventually
- - [ ] Link previews
- - [ ] Modern chat view (chat-bubbles)
+ - [x] Link previews
+ - [x] Modern chat view (chat-bubbles)
  - [ ] Plugins for ContextMenu on User List ?
 
 ## NO TODOs / NO GOs 
