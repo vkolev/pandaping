@@ -180,6 +180,10 @@ private struct BubbleRow: View {
                     .padding(.vertical, 6)
                     .background(bubbleBackground)
                     .clipShape(RoundedRectangle(cornerRadius: 14))
+
+                    if let url = firstURL {
+                        LinkPreviewView(url: url, isOwn: isOwn)
+                    }
                 }
 
                 if !isOwn { Spacer(minLength: 60) }
@@ -227,5 +231,14 @@ private struct BubbleRow: View {
             return message.parameters.last ?? ""
         }
         return message.parameters.joined(separator: " ")
+    }
+
+    private var firstURL: URL? {
+        for segment in MessageTextParser.parse(messageText) {
+            if case .link(let url) = segment.kind {
+                return url
+            }
+        }
+        return nil
     }
 }
